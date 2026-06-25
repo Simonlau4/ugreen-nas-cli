@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HARNESS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PYTHON_BIN="${PYTHON:-python3}"
+INSTALL_HOME="${UGNAS_INSTALL_HOME:-$HOME/.local/share/ugreen-nas-cli}"
+BIN_DIR="${UGNAS_BIN_DIR:-$HOME/.local/bin}"
+VENV_DIR="$INSTALL_HOME/venv"
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "python3 not found. Install Python 3.11+ first." >&2
+  exit 1
+fi
+
+mkdir -p "$INSTALL_HOME" "$BIN_DIR"
+"$PYTHON_BIN" -m venv "$VENV_DIR"
+"$VENV_DIR/bin/python" -m pip install --upgrade pip >/dev/null
+"$VENV_DIR/bin/python" -m pip install -e "$HARNESS_DIR" >/dev/null
+
+cat > "$BIN_DIR/ugnas" <<EOF
+#!/usr/bin/env bash
+exec "$VENV_DIR/bin/ugnas" "\$@"
+EOF
+
+cat > "$BIN_DIR/cli-anything-ugreen-nas" <<EOF
+#!/usr/bin/env bash
+exec "$VENV_DIR/bin/cli-anything-ugreen-nas" "\$@"
+EOF
+
+chmod 755 "$BIN_DIR/ugnas" "$BIN_DIR/cli-anything-ugreen-nas"
+
+"$BIN_DIR/ugnas" --help >/dev/null
+
+echo "Installed ugnas to $BIN_DIR/ugnas"
+echo "Installed cli-anything-ugreen-nas to $BIN_DIR/cli-anything-ugreen-nas"
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) echo "Add $BIN_DIR to PATH if your shell cannot find ugnas." ;;
+esac

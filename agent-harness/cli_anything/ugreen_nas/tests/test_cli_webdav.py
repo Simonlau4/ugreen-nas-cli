@@ -1,0 +1,183 @@
+from __future__ import annotations
+
+import base64
+import json
+import threading
+import xml.sax.saxutils
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from cli_anything.ugreen_nas._cli import main
+
+
+class Store:
+    def __init__(self):
+        self.items = {
+            "/": None,
+            "/Team": None,
+            "/Team/readme.txt": b"hello",
+        }
+
+
+class Handler(BaseHTTPRequestHandler):
+    store: Store
+
+    def log_message(self, format, *args):
+        return
+
+    def do_PROPFIND(self):
+        path = self.path.rstrip("/") or "/"
+        if path not in self.store.items:
+            self.send_error(404)
+            return
+        depth = self.headers.get("Depth", "1")
+        paths = [path]
+        if depth == "1":
+            prefix = path.rstrip("/") + "/"
+            paths.extend(
+                child
+                for child in sorted(self.store.items)
+                if child != path and child.startswith(prefix) and "/" not in child[len(prefix) :]
+            )
+        body = self._multistatus(paths)
+        self.send_response(207)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        path = self.path.rstrip("/") or "/"
+        data = self.store.items.get(path)
+        if data is None:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_PUT(self):
+        path = self.path.rstrip("/") or "/"
+        if self.headers.get("If-None-Match") == "*" and path in self.store.items:
+            self.send_error(412)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        self.store.items[path] = self.rfile.read(length)
+        self.send_response(201)
+        self.end_headers()
+
+    def do_DELETE(self):
+        path = self.path.rstrip("/") or "/"
+        if path not in self.store.items:
+            self.send_error(404)
+            return
+        del self.store.items[path]
+        self.send_response(204)
+        self.end_headers()
+
+    def _multistatus(self, paths):
+        responses = []
+        for path in paths:
+            data = self.store.items[path]
+            is_dir = data is None
+            escaped = xml.sax.saxutils.escape(path)
+            size = "" if is_dir else f"<d:getcontentlength>{len(data)}</d:getcontentlength>"
+            resource_type = "<d:collection/>" if is_dir else ""
+            responses.append(
+                f"""
+                <d:response>
+                  <d:href>{escaped}</d:href>
+                  <d:propstat>
+                    <d:prop>
+                      <d:resourcetype>{resource_type}</d:resourcetype>
+                      {size}
+                      <d:getetag>"{len(path)}"</d:getetag>
+                    </d:prop>
+                    <d:status>HTTP/1.1 200 OK</d:status>
+                  </d:propstat>
+                </d:response>
+                """
+            )
+        body = (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<d:multistatus xmlns:d="DAV:">'
+            + "".join(responses)
+            + "</d:multistatus>"
+        )
+        return body.encode("utf-8")
+
+
+def test_doctor_and_ls_json(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        assert main(["--config", str(config), "--json", "doctor"]) == 0
+        doctor = json.loads(capsys.readouterr().out)
+        assert doctor["ok"] is True
+
+        assert main(["--config", str(config), "--json", "ls", "/Team"]) == 0
+        listing = json.loads(capsys.readouterr().out)
+        assert listing["items"][0]["path"] == "/Team/readme.txt"
+
+
+def test_cat_put_and_rm_gate(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+
+        assert main(["--config", str(config), "--json", "cat", "/Team/readme.txt"]) == 0
+        body = json.loads(capsys.readouterr().out)
+        assert body["content"] == "hello"
+
+        local = tmp_path / "upload.txt"
+        local.write_text("uploaded", encoding="utf-8")
+        assert main(["--config", str(config), "--json", "put", str(local), "/Team/upload.txt"]) == 0
+        uploaded = json.loads(capsys.readouterr().out)
+        assert uploaded["bytes"] == 8
+
+        assert main(["--config", str(config), "--json", "rm", "/Team/upload.txt"]) == 2
+        denied = json.loads(capsys.readouterr().out)
+        assert denied["error"] == "ConfigError"
+
+        assert main(["--config", str(config), "--json", "rm", "/Team/upload.txt", "--yes"]) == 0
+        deleted = json.loads(capsys.readouterr().out)
+        assert deleted["ok"] is True
+
+
+def test_path_outside_allowed_root_is_denied(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        assert main(["--config", str(config), "--json", "ls", "/Other"]) == 2
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["error"] == "PathAccessError"
+
+
+class webdav_server:
+    def __enter__(self):
+        Handler.store = Store()
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        host, port = self.server.server_address
+        return f"http://{host}:{port}"
+
+    def __exit__(self, exc_type, exc, tb):
+        self.server.shutdown()
+        self.thread.join()
+
+
+def write_config(tmp_path: Path, base_url: str) -> Path:
+    config = tmp_path / "config.toml"
+    password = base64.b64encode(b"pw").decode("ascii")
+    config.write_text(
+        f"""
+        [profile.default]
+        base_url = "{base_url}"
+        username = "alice"
+        password_command = "python3 -c 'import base64; print(base64.b64decode(\\"{password}\\").decode())'"
+        allowed_roots = ["/Team"]
+        verify_tls = true
+        audit_log = "{tmp_path / 'audit.log'}"
+        """,
+        encoding="utf-8",
+    )
+    return config

@@ -1,0 +1,10 @@
+# Copy shape only. Keep real values in each user's home directory:
+# ~/.config/ugreen-nas-cli/config.toml
+
+[profile.default]
+base_url = "https://NAS_TAILSCALE_OR_DOMAIN:5006"
+username = "alice"
+password_command = "security find-generic-password -s ugreen-nas -a alice -w"
+allowed_roots = ["/Team"]
+verify_tls = true
+audit_log = "~/.local/state/ugreen-nas-cli/audit.log"
