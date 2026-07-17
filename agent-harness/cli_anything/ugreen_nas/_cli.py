@@ -73,7 +73,13 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("--macos-keychain-service")
     profile.add_argument("--insecure", action="store_true", help="Disable TLS verification.")
 
-    subparsers.add_parser("doctor", help="Validate config and WebDAV reachability.")
+    doctor = subparsers.add_parser("doctor", help="Validate config and WebDAV reachability.")
+    doctor.add_argument("--path", help="Also verify access to this configured NAS path.")
+
+    subparsers.add_parser(
+        "capabilities",
+        help="Describe the configured Agent command and safety surface.",
+    )
 
     ls = subparsers.add_parser("ls", help="List a remote directory.")
     ls.add_argument("remote_path")
@@ -143,6 +149,8 @@ def run(args: argparse.Namespace) -> int:
             raise ConfigError("--dry-run is only supported for put, edit, mkdir, mv, cp, and rm")
         return cmd_dry_run(args, profile)
 
+    if args.command == "capabilities":
+        return cmd_capabilities(args, profile)
     if args.command == "doctor":
         return cmd_doctor(args, profile, client)
     if args.command == "ls":
@@ -270,9 +278,30 @@ def cmd_dry_run(args: argparse.Namespace, profile) -> int:
     return emit(args, payload, f"dry-run: {args.command}")
 
 
+def cmd_capabilities(args: argparse.Namespace, profile) -> int:
+    payload = {
+        "ok": True,
+        "profile": profile.name,
+        "allowed_roots": profile.allowed_roots,
+        "read_commands": ["doctor", "capabilities", "ls", "stat", "cat", "get", "search", "recent"],
+        "write_commands": ["put", "edit", "mkdir", "mv", "cp"],
+        "dangerous_commands": ["rm"],
+        "safety": {
+            "global_flags_before_command": True,
+            "preview_writes_with": "--dry-run",
+            "delete_requires": "--yes",
+            "overwrite_requires": "--overwrite",
+        },
+    }
+    return emit(args, payload, json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 def cmd_doctor(args: argparse.Namespace, profile, client: WebDavClient) -> int:
+    checked_path = "/"
+    if args.path:
+        checked_path = assert_allowed(args.path, profile.allowed_roots)
     try:
-        items = client.propfind("/", depth="0")
+        items = client.propfind(checked_path, depth="0")
     except WebDavError as exc:
         hint = None
         if exc.status in {301, 302, 303, 307, 308, 404, 405}:
@@ -283,6 +312,7 @@ def cmd_doctor(args: argparse.Namespace, profile, client: WebDavClient) -> int:
             "ok": False,
             "profile": profile.name,
             "base_url": profile.base_url,
+            "checked_path": checked_path,
             "status": exc.status,
             "message": str(exc),
             "hint": hint,
@@ -294,12 +324,14 @@ def cmd_doctor(args: argparse.Namespace, profile, client: WebDavClient) -> int:
         "base_url": profile.base_url,
         "username": profile.username,
         "allowed_roots": profile.allowed_roots,
-        "root_items": [item_to_json(item) for item in items],
+        "checked_path": checked_path,
+        "path_items": [item_to_json(item) for item in items],
     }
     lines = [
         "profile ok",
         f"base_url: {profile.base_url}",
         f"username: {profile.username}",
+        f"checked_path: {checked_path}",
         "webdav: reachable",
     ]
     return emit(args, payload, "\n".join(lines))

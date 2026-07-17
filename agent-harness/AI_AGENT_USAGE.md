@@ -16,7 +16,8 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 ## Health Check
 
 ```bash
-ugnas --profile default --json doctor
+ugnas --profile default --json doctor --path "/Shared"
+ugnas --profile default --json capabilities
 ```
 
 If this fails with a certificate error, the NAS is using a self-signed certificate. Ask the user whether the profile was intentionally created with `--insecure`.
@@ -62,3 +63,17 @@ The CLI needs a raw WebDAV endpoint, not just a browser login page. Prefer:
 - Trusted HTTPS certificate when possible.
 
 UGREENlink is useful for browser/client access, but only use it with this CLI if `ugnas --json doctor` succeeds.
+
+## Shared knowledge context
+
+When the user provides `NAS_KB_API_URL` and `NAS_KB_API_TOKEN` through the local secret environment, query the shared read-only gateway:
+
+```bash
+curl --silent --show-error \
+  -X POST "$NAS_KB_API_URL/v1/search" \
+  -H "Authorization: Bearer $NAS_KB_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"question to answer","method":"hybrid","top_k":5,"include_content":true}'
+```
+
+Preserve the returned `remote_path`. Retrieve the original through `/v1/source/<doc_id>` before making high-confidence factual claims. Never print, log, or paste the gateway token.

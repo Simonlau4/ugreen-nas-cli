@@ -121,13 +121,27 @@ class Handler(BaseHTTPRequestHandler):
 def test_doctor_and_ls_json(tmp_path, capsys):
     with webdav_server() as base_url:
         config = write_config(tmp_path, base_url)
-        assert main(["--config", str(config), "--json", "doctor"]) == 0
+        assert main(["--config", str(config), "--json", "doctor", "--path", "/Team"]) == 0
         doctor = json.loads(capsys.readouterr().out)
         assert doctor["ok"] is True
+        assert doctor["checked_path"] == "/Team"
+        assert doctor["path_items"][0]["path"] == "/Team"
 
         assert main(["--config", str(config), "--json", "ls", "/Team"]) == 0
         listing = json.loads(capsys.readouterr().out)
         assert listing["items"][0]["path"] == "/Team/readme.txt"
+
+
+def test_capabilities_reports_agent_safety_surface(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        assert main(["--config", str(config), "--json", "capabilities"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["allowed_roots"] == ["/Team"]
+        assert "recent" in payload["read_commands"]
+        assert "put" in payload["write_commands"]
+        assert payload["dangerous_commands"] == ["rm"]
+        assert payload["safety"]["preview_writes_with"] == "--dry-run"
 
 
 def test_cat_put_and_rm_gate(tmp_path, capsys):

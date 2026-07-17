@@ -22,6 +22,8 @@ Use global flags before subcommands:
 
 ```bash
 ugnas --profile default --json doctor
+ugnas --profile default --json doctor --path /Team
+ugnas --profile default --json capabilities
 ugnas --profile default --json ls /Team
 ugnas --profile default --json cat /Team/brief.md
 ugnas --profile default --json get /Team/file.docx -o ./file.docx
@@ -37,6 +39,7 @@ ugnas --profile default --json recent --under /Team --days 7 --max-depth 4
 ## Safety
 
 - Respect profile `allowed_roots`.
+- For a new teammate or Agent environment, verify the exact assigned root with `doctor --path`, then read `capabilities`.
 - Use `--json` for agent parsing.
 - Inspect with `ls`, `stat`, or `cat`, then preview every write with global `--dry-run`.
 - Put global flags before the command, for example `ugnas --json --dry-run mv ...`.
