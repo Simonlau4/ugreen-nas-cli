@@ -4,6 +4,17 @@ UGREEN NAS CLI is a small, agent-friendly command-line interface for working wit
 
 The CLI uses each user's own NAS account. Passwords are not stored in this repository; on macOS, the setup script stores them in Keychain and writes only a local profile.
 
+## Shared knowledge layer
+
+The optional [`nas-kb/`](nas-kb/) package builds an incremental knowledge index from approved NAS Markdown, PDF, and DOCX files. It keeps NAS files as the source of truth, uses EverOS as a rebuildable retrieval layer, and provides an authenticated read-only gateway for team Agents.
+
+Use the two layers together:
+
+- `ugnas` / `nas-cli`: each teammate lists, reads, uploads, and updates files with an individual NAS account.
+- `nas-kb`: one central indexer updates approved `Published/` directories and serves shared search context.
+
+The central EverOS service and provider credentials stay private; team Agents receive only a gateway URL and read token.
+
 ## Why This Exists
 
 NAS web apps are built for humans. AI agents and automation tools need a stable command surface with structured output. This project provides:
@@ -127,8 +138,13 @@ agent-harness/
   scripts/setup-profile-macos-keychain.sh
   AI_AGENT_USAGE.md
   cli_anything/ugreen_nas/
+nas-kb/
+  scripts/install.sh
+  config/team-sync.example.toml
+  nas_kb/
 skills/
   cli-anything-ugreen-nas/SKILL.md
+  nas-knowledge-base/SKILL.md
 ```
 
 ## Development
