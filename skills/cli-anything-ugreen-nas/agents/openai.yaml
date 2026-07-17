@@ -1,4 +1,4 @@
 interface:
   display_name: "UGREEN NAS"
-  short_description: "Search, retrieve, and safely manage files on UGREEN NAS"
-  default_prompt: "Use $cli-anything-ugreen-nas to find recent NAS assets and preview any file changes."
+  short_description: "Connect team Agents to NAS knowledge and files"
+  default_prompt: "Use $cli-anything-ugreen-nas to load the team NAS knowledge entry, verify assigned roots, and safely work with files."

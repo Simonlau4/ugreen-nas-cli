@@ -95,6 +95,23 @@ ugnas --profile default --json capabilities
 ugnas --profile default --json ls "/Shared"
 ```
 
+For the startup test, configure the shared Agent knowledge root:
+
+```bash
+scripts/setup-profile-macos-keychain.sh \
+  --base-url https://NAS_IP_OR_DOMAIN:5006 \
+  --username YOUR_NAS_USERNAME \
+  --allowed-root "/Agent_Knowledge_Base"
+
+ugnas --profile default --json doctor --path "/Agent_Knowledge_Base"
+ugnas --profile default --json capabilities
+ugnas --profile default --json cat "/Agent_Knowledge_Base/AGENT_ENTRY.md"
+ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
+ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
+```
+
+Repeat `--allowed-root` for an approved project root only when the teammate needs project data. The Agent knowledge base does not grant project access. The current startup pilot is complete when a teammate's local Agent reads `STARTUP_TEST_KNOWLEDGE.md` and answers a listed question with that NAS source path; project access and semantic search are not required.
+
 For administrator and teammate rollout, follow [`docs/team-onboarding.md`](docs/team-onboarding.md).
 
 ## Deploy the shared knowledge layer

@@ -6,7 +6,7 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 
 - Always use `--json`.
 - Keep global flags before the command.
-- Stay inside the configured shared root, for example `/Shared`.
+- Stay inside the configured allowed roots.
 - Prefer `ls`, `stat`, and `cat` before any write.
 - Preview writes with global `--dry-run` before executing them.
 - Use `get` before editing binary files such as docx, xlsx, pptx, psd, ai, mov, mp4, or images.
@@ -14,7 +14,37 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 - Do not use `rm` unless the user explicitly asks to delete something.
 - `rm` requires `--yes`.
 
-## Health Check
+## Team startup
+
+For the team Agent setup, start every new environment with:
+
+```bash
+ugnas --profile default --json doctor --path "/Agent_Knowledge_Base"
+ugnas --profile default --json capabilities
+ugnas --profile default --json cat "/Agent_Knowledge_Base/AGENT_ENTRY.md"
+ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
+ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
+```
+
+For a project question, choose the relevant project from `PROJECTS.md`, then verify that exact project root:
+
+```bash
+ugnas --profile default --json doctor --path "/YOUR_TEAM_ROOT"
+```
+
+`PROJECTS.md` provides navigation; it does not grant access. If the knowledge root returns `401`, `403`, or `404`, report the missing permission and stop. Do not scan `/` or use a department project as the team entry.
+
+## Answer questions with NAS knowledge
+
+1. For the startup test, read `STARTUP_TEST_KNOWLEDGE.md` from its exact path.
+2. For a project question, select the authorized project root from `PROJECTS.md`, then use `search`, `recent`, `ls`, and `stat` inside that root.
+3. Read the current source with `cat`, or download a binary file with `get` before analyzing it.
+4. Answer from the file contents and include the key NAS source paths.
+5. If the available files are insufficient, state what is missing. Do not guess or expand the search beyond the configured roots.
+
+## Generic health check
+
+For a standalone setup without the team knowledge root:
 
 ```bash
 ugnas --profile default --json doctor --path "/Shared"
@@ -65,9 +95,9 @@ The CLI needs a raw WebDAV endpoint, not just a browser login page. Prefer:
 
 UGREENlink is useful for browser/client access, but only use it with this CLI if `ugnas --json doctor` succeeds.
 
-## Shared knowledge context
+## Optional semantic search
 
-When the user provides `NAS_KB_API_URL` and `NAS_KB_API_TOKEN` through the local secret environment, query the shared read-only gateway:
+Only when ordinary NAS file search is insufficient and the user provides `NAS_KB_API_URL` and `NAS_KB_API_TOKEN` through the local secret environment, query the shared read-only gateway:
 
 ```bash
 curl --silent --show-error \
