@@ -240,3 +240,7 @@ python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests -q
 ## Notes
 
 This project currently targets WebDAV. SMB, SFTP, and NFS are intentionally not wrapped because WebDAV gives the simplest HTTP-native command surface for local AI agents and scripts.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
