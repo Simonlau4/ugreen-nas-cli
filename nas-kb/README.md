@@ -13,12 +13,26 @@
 
 EverOS uses the configured LLM, embedding, and rerank providers. Applying an index can therefore send document content to those configured providers. Only index directories whose content is approved for that provider path.
 
+## Prerequisites
+
+- Python 3.11+
+- an installed and configured `ugnas` / `nas-cli`
+- a reachable EverOS API, normally on `http://127.0.0.1:8765`
+- configured EverOS LLM, embedding, and rerank providers
+
+EverOS is an external dependency and is not bundled by this repository. Keep it on the central indexer rather than exposing it to teammates or the public internet.
+
 ## Install
 
+From the repository root:
+
 ```bash
+cd nas-kb
 scripts/install.sh
-nas-kb --json doctor
+nas-kb --json doctor --path "/Team/Knowledge/Published"
 ```
+
+The doctor command checks the NAS path, EverOS, the local state database, and the active EverOS document scope. Fix any failed component before indexing.
 
 ## Workflow
 
@@ -73,11 +87,13 @@ Keep EverOS on loopback. Bind only the gateway to a Tailscale or company-VPN add
 Store a high-entropy read token in the service environment:
 
 ```bash
-export NAS_KB_API_TOKEN="set-this-in-a-private-secret-store"
+export NAS_KB_API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 nas-kb --json serve --host 127.0.0.1 --port 8787
 ```
 
 For team access, replace `127.0.0.1` with the central indexer's Tailscale or VPN address. Do not expose this gateway directly to the public internet.
+
+The token must contain at least 32 characters. Store it in a secret manager for persistent deployments. The server checks EverOS before binding and exits instead of advertising a gateway that cannot search.
 
 The unauthenticated health endpoint returns service readiness without exposing index contents:
 
@@ -102,6 +118,8 @@ nas-kb --json remote-get-source d_123456789abc -o ./source.md
 ```
 
 The gateway is intentionally read-only. Teammates update source documents through their own `ugnas` accounts; only the central indexer applies changes to EverOS.
+
+Existing local source downloads are preserved unless `--overwrite` is explicitly supplied.
 
 ### Sync approved team directories
 

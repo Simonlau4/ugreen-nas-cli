@@ -44,6 +44,7 @@ ugnas --profile default --json recent --under /Team --days 7 --max-depth 4
 - Inspect with `ls`, `stat`, or `cat`, then preview every write with global `--dry-run`.
 - Put global flags before the command, for example `ugnas --json --dry-run mv ...`.
 - Require explicit `--yes` for deletion.
+- Do not overwrite an existing local download unless requested; `get` requires `--overwrite`.
 - Never convert a deletion preview into a real `rm --yes` without explicit user approval.
 - Prefer Tailscale or VPN for remote CLI access if UGREENlink does not pass `doctor`.
 - For coworker agent handoff, provide `AI_AGENT_USAGE.md`.

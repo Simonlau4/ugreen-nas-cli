@@ -10,6 +10,7 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 - Prefer `ls`, `stat`, and `cat` before any write.
 - Preview writes with global `--dry-run` before executing them.
 - Use `get` before editing binary files such as docx, xlsx, pptx, psd, ai, mov, mp4, or images.
+- Never overwrite an existing local download unless the user requested it; `get` requires `--overwrite`.
 - Do not use `rm` unless the user explicitly asks to delete something.
 - `rm` requires `--yes`.
 

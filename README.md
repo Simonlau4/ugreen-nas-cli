@@ -46,7 +46,6 @@ ugnas --profile default --json --dry-run mv "/Shared/draft.md" "/Shared/archive/
 
 ## Requirements
 
-- macOS for the included Keychain setup script
 - Python 3.11+
 - `git`
 - a reachable UGREEN NAS WebDAV endpoint, usually:
@@ -56,6 +55,8 @@ https://NAS_IP_OR_DOMAIN:5006
 ```
 
 For remote use, prefer Tailscale or a company VPN so the WebDAV service is not exposed directly to the public internet.
+
+macOS is required only for the included Keychain helper. The CLI itself also runs on Linux when credentials are supplied through environment variables or another local password command.
 
 ## Quick Start
 
@@ -96,6 +97,57 @@ ugnas --profile default --json ls "/Shared"
 
 For administrator and teammate rollout, follow [`docs/team-onboarding.md`](docs/team-onboarding.md).
 
+## Deploy the shared knowledge layer
+
+`nas-kb` requires a separately deployed EverOS API. EverOS and its LLM, embedding, and rerank provider credentials are intentionally not bundled in this repository. Before continuing, keep EverOS on the central indexer and verify that its health endpoint returns `status=ok`:
+
+```bash
+curl --fail --silent http://127.0.0.1:8765/health
+```
+
+Install the knowledge package on the central indexer:
+
+```bash
+cd ../nas-kb
+scripts/install.sh
+nas-kb --json doctor --path "/Team/Knowledge/Published"
+```
+
+Create the private sync configuration and preview it before the first index:
+
+```bash
+mkdir -p ~/.config/nas-kb
+cp config/team-sync.example.toml ~/.config/nas-kb/team-sync.toml
+# Edit team-sync.toml so it contains only approved Published/ roots.
+nas-kb --json sync --config ~/.config/nas-kb/team-sync.toml
+nas-kb --json sync --config ~/.config/nas-kb/team-sync.toml --apply
+```
+
+Generate a read token of at least 32 characters and start the internal gateway:
+
+```bash
+export NAS_KB_API_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+nas-kb --json serve --host 127.0.0.1 --port 8787
+```
+
+`serve` now refuses to start when EverOS is unhealthy. In another shell, verify the gateway:
+
+```bash
+curl --fail --silent http://127.0.0.1:8787/health
+```
+
+For team access, bind the gateway to the central indexer's Tailscale or company-VPN address and store the token in a secret manager. Do not expose the gateway or EverOS directly to the public internet.
+
+Install `nas-kb` on a teammate or Agent machine to use the read-only client:
+
+```bash
+export NAS_KB_API_URL="http://NAS_KB_TAILSCALE_ADDRESS:8787"
+export NAS_KB_API_TOKEN="read-token-from-secret-store"
+nas-kb --json remote-search "project decisions and constraints" --top-k 5
+```
+
+The complete operator workflow and permission boundaries are in [`nas-kb/README.md`](nas-kb/README.md) and [`nas-kb/docs/team-architecture.md`](nas-kb/docs/team-architecture.md).
+
 ## Giving It To An AI Agent
 
 After setup, give the agent this file:
@@ -129,6 +181,7 @@ Avoid plain HTTP and avoid directly publishing NAS services to the public intern
 - Credentials stay in the user's local environment or macOS Keychain.
 - `allowed_roots` constrains all remote paths before network requests are made.
 - `rm` requires `--yes`.
+- `get` does not overwrite an existing local file unless `--overwrite` is provided.
 - `put` does not overwrite existing files unless `--overwrite` is provided.
 - `--dry-run` previews `put`, `edit`, `mkdir`, `mv`, `cp`, and `rm` without changing the NAS.
 - Mutating operations append a local audit log by default.

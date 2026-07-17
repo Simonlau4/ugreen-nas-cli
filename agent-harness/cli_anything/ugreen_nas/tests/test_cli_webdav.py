@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import threading
+import urllib.parse
 import xml.sax.saxutils
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -82,6 +83,40 @@ class Handler(BaseHTTPRequestHandler):
             return
         del self.store.items[path]
         self.send_response(204)
+        self.end_headers()
+
+    def do_MKCOL(self):
+        path = self.path.rstrip("/") or "/"
+        if path in self.store.items:
+            self.send_error(405)
+            return
+        self.store.items[path] = None
+        self.store.modified[path] = datetime.now(timezone.utc)
+        self.send_response(201)
+        self.end_headers()
+
+    def do_MOVE(self):
+        self._copy_or_move(move=True)
+
+    def do_COPY(self):
+        self._copy_or_move(move=False)
+
+    def _copy_or_move(self, *, move):
+        source = self.path.rstrip("/") or "/"
+        destination = urllib.parse.urlsplit(self.headers["Destination"]).path.rstrip("/") or "/"
+        destination = urllib.parse.unquote(destination)
+        if source not in self.store.items:
+            self.send_error(404)
+            return
+        if destination in self.store.items and self.headers.get("Overwrite") != "T":
+            self.send_error(412)
+            return
+        self.store.items[destination] = self.store.items[source]
+        self.store.modified[destination] = datetime.now(timezone.utc)
+        if move:
+            del self.store.items[source]
+            self.store.modified.pop(source, None)
+        self.send_response(201)
         self.end_headers()
 
     def _multistatus(self, paths):
@@ -165,6 +200,85 @@ def test_cat_put_and_rm_gate(tmp_path, capsys):
         assert main(["--config", str(config), "--json", "rm", "/Team/upload.txt", "--yes"]) == 0
         deleted = json.loads(capsys.readouterr().out)
         assert deleted["ok"] is True
+
+
+def test_get_requires_explicit_local_overwrite(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        output = tmp_path / "readme.txt"
+        output.write_text("keep me", encoding="utf-8")
+
+        assert main(
+            ["--config", str(config), "--json", "get", "/Team/readme.txt", "-o", str(output)]
+        ) == 2
+        denied = json.loads(capsys.readouterr().out)
+        assert "use --overwrite" in denied["message"]
+        assert output.read_text(encoding="utf-8") == "keep me"
+
+        assert main(
+            [
+                "--config",
+                str(config),
+                "--json",
+                "get",
+                "/Team/readme.txt",
+                "-o",
+                str(output),
+                "--overwrite",
+            ]
+        ) == 0
+        capsys.readouterr()
+        assert output.read_text(encoding="utf-8") == "hello"
+
+
+def test_mkdir_copy_and_move_use_real_webdav_methods(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+
+        assert main(["--config", str(config), "--json", "mkdir", "/Team/New"]) == 0
+        capsys.readouterr()
+        assert Handler.store.items["/Team/New"] is None
+
+        assert main(
+            [
+                "--config",
+                str(config),
+                "--json",
+                "cp",
+                "/Team/readme.txt",
+                "/Team/copied.txt",
+            ]
+        ) == 0
+        capsys.readouterr()
+        assert Handler.store.items["/Team/copied.txt"] == b"hello"
+
+        assert main(
+            [
+                "--config",
+                str(config),
+                "--json",
+                "mv",
+                "/Team/copied.txt",
+                "/Team/moved.txt",
+            ]
+        ) == 0
+        capsys.readouterr()
+        assert "/Team/copied.txt" not in Handler.store.items
+        assert Handler.store.items["/Team/moved.txt"] == b"hello"
+
+
+def test_search_rejects_invalid_bounds(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        cases = [
+            ["search", " ", "--under", "/Team"],
+            ["search", "readme", "--under", "/Team", "--max-depth", "-1"],
+            ["search", "readme", "--under", "/Team", "--limit", "0"],
+        ]
+        for command in cases:
+            assert main(["--config", str(config), "--json", *command]) == 2
+            payload = json.loads(capsys.readouterr().out)
+            assert payload["error"] == "ConfigError"
 
 
 def test_path_outside_allowed_root_is_denied(tmp_path, capsys):

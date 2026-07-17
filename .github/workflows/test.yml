@@ -1,0 +1,37 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install packages and tests
+        run: python -m pip install ./agent-harness ./nas-kb pytest
+      - name: Check Python and shell syntax
+        run: |
+          python -m compileall -q agent-harness/cli_anything nas-kb/nas_kb
+          bash -n agent-harness/scripts/install.sh
+          bash -n nas-kb/scripts/install.sh
+          bash -n agent-harness/scripts/setup-profile-macos-keychain.sh
+      - name: Run tests
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests -q

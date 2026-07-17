@@ -76,7 +76,11 @@ class WebDavClient:
         self.request("PUT", path, body=data, headers=headers, expected={200, 201, 204})
 
     def mkdir(self, path: str) -> None:
-        self.request("MKCOL", path, expected={200, 201, 204, 405})
+        status, _, body = self.request("MKCOL", path, expected={200, 201, 204, 405})
+        if status == 405:
+            item = self.stat(path)
+            if not item.is_dir:
+                raise WebDavError(f"MKCOL failed with HTTP {status}", status, body)
 
     def delete(self, path: str) -> None:
         self.request("DELETE", path, expected={200, 202, 204})
