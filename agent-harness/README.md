@@ -57,7 +57,10 @@ Do not commit shell scripts or docs containing real passwords.
 ugnas --profile default --json doctor
 ugnas --profile default --json ls "/Shared"
 ugnas --profile default --json cat "/Shared/brief.md"
+# Download to a new local path:
 ugnas --profile default --json get "/Shared/report.docx" -o ./report.docx
+# Replace an existing local download:
+ugnas --profile default --json get "/Shared/report.docx" -o ./report.docx --overwrite
 ugnas --profile default --json put ./report.docx "/Shared/report.docx" --overwrite
 ugnas --profile default --json mkdir "/Shared/NewFolder"
 ugnas --profile default --json mv "/Shared/a.md" "/Shared/archive/a.md" --overwrite
@@ -69,6 +72,8 @@ ugnas --profile default --json --dry-run rm "/Shared/a-copy.md"
 ```
 
 Place global flags such as `--json` and `--dry-run` before the command. A dry run never writes an audit event because it does not change the NAS.
+
+`get` preserves an existing local file unless `--overwrite` is supplied.
 
 ## Remote Access Choice
 

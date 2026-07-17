@@ -94,6 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     get = subparsers.add_parser("get", help="Download a remote file.")
     get.add_argument("remote_path")
     get.add_argument("-o", "--output", type=Path)
+    get.add_argument("--overwrite", action="store_true")
 
     put = subparsers.add_parser("put", help="Upload a local file or stdin.")
     put.add_argument("local_path", help="Local file path, or '-' for stdin.")
@@ -339,10 +340,12 @@ def cmd_doctor(args: argparse.Namespace, profile, client: WebDavClient) -> int:
 
 def cmd_get(args: argparse.Namespace, profile, client: WebDavClient) -> int:
     remote = assert_allowed(args.remote_path, profile.allowed_roots)
-    data = client.get(remote)
     output = args.output
     if output is None:
         output = Path(remote.rstrip("/").split("/")[-1] or "download")
+    if output.exists() and not args.overwrite:
+        raise ConfigError(f"output exists; use --overwrite: {output}")
+    data = client.get(remote)
     output.write_bytes(data)
     payload = {"ok": True, "remote_path": remote, "output": str(output), "bytes": len(data)}
     return emit(args, payload, f"downloaded {remote} -> {output} ({len(data)} bytes)")
@@ -395,8 +398,15 @@ def cmd_edit(args: argparse.Namespace, profile, client: WebDavClient) -> int:
 
 
 def cmd_search(args: argparse.Namespace, profile, client: WebDavClient) -> int:
+    if not args.query.strip():
+        raise ConfigError("search query must not be empty")
+    if args.max_depth < 0:
+        raise ConfigError("search --max-depth must be 0 or greater")
+    if args.limit <= 0:
+        raise ConfigError("search --limit must be greater than 0")
+
     start = assert_allowed(args.under, profile.allowed_roots)
-    query = args.query.lower()
+    query = args.query.strip().lower()
     queue: list[tuple[str, int]] = [(start, 0)]
     seen = set()
     matches: list[WebDavItem] = []

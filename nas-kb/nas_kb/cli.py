@@ -31,6 +31,7 @@ DEFAULT_GATEWAY_PORT = 8787
 DEFAULT_GATEWAY_TOKEN_ENV = "NAS_KB_API_TOKEN"
 DEFAULT_GATEWAY_URL_ENV = "NAS_KB_API_URL"
 MAX_GATEWAY_BODY_BYTES = 64 * 1024
+MIN_GATEWAY_TOKEN_LENGTH = 32
 
 
 class NasKbError(RuntimeError):
@@ -75,8 +76,11 @@ class NasClient:
             raise NasKbError(payload.get("message") or f"nas-cli failed: {' '.join(args)}")
         return payload
 
-    def doctor(self) -> dict[str, Any]:
-        return self._run(["doctor"])
+    def doctor(self, path: str | None = None) -> dict[str, Any]:
+        args = ["doctor"]
+        if path:
+            args.extend(["--path", path])
+        return self._run(args)
 
     def list(self, remote_path: str) -> list[RemoteItem]:
         payload = self._run(["ls", remote_path])
@@ -396,6 +400,10 @@ def index_documents(
     category_id: str | None,
     apply: bool,
 ) -> dict[str, Any]:
+    if max_bytes <= 0:
+        raise NasKbError("--max-bytes must be greater than 0")
+    if not extensions:
+        raise NasKbError("at least one file extension is required")
     documents, truncated = discover_documents(
         nas,
         under,
@@ -578,6 +586,13 @@ def search_documents(
     top_k: int,
     include_content: bool,
 ) -> dict[str, Any]:
+    query = query.strip()
+    if not query:
+        raise NasKbError("query must be a non-empty string")
+    if method not in {"keyword", "vector", "hybrid"}:
+        raise NasKbError("method must be keyword, vector, or hybrid")
+    if not 1 <= top_k <= 50:
+        raise NasKbError("top-k must be between 1 and 50")
     payload = everos.search(
         query,
         method=method,
@@ -607,6 +622,7 @@ class GatewayServer(ThreadingHTTPServer):
         project_id: str,
         token: str,
     ):
+        validate_gateway_token(token)
         super().__init__(server_address, GatewayHandler)
         self.nas = nas
         self.everos = everos
@@ -835,6 +851,13 @@ def require_env(name: str) -> str:
     return value
 
 
+def validate_gateway_token(token: str) -> None:
+    if len(token) < MIN_GATEWAY_TOKEN_LENGTH:
+        raise NasKbError(
+            f"gateway token must contain at least {MIN_GATEWAY_TOKEN_LENGTH} characters"
+        )
+
+
 def build_multipart(
     fields: dict[str, str],
     file_field: str,
@@ -877,7 +900,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("doctor", help="Check NAS, EverOS, and local state.")
+    doctor = subparsers.add_parser("doctor", help="Check NAS, EverOS, and local state.")
+    doctor.add_argument("--path", help="Verify access to this configured NAS path.")
 
     index = subparsers.add_parser("index", help="Preview or apply incremental NAS indexing.")
     index.add_argument("--under", required=True, help="Remote NAS directory to scan.")
@@ -972,6 +996,9 @@ def main(argv: list[str] | None = None) -> int:
         everos = EverOSClient(args.everos_url, args.app_id, args.project_id)
         if args.command == "serve":
             token = require_env(args.token_env)
+            everos_health = everos.health()
+            if everos_health.get("status") != "ok":
+                raise NasKbError("EverOS health check did not return status=ok")
             server = GatewayServer(
                 (args.host, args.port),
                 nas=nas,
@@ -1002,7 +1029,7 @@ def main(argv: list[str] | None = None) -> int:
         state = StateStore(args.state.expanduser(), args.app_id, args.project_id)
         try:
             if args.command == "doctor":
-                nas_health = nas.doctor()
+                nas_health = nas.doctor(args.path)
                 everos_health = everos.health()
                 payload = {
                     "ok": nas_health.get("ok") is True and everos_health.get("status") == "ok",
@@ -1036,6 +1063,8 @@ def main(argv: list[str] | None = None) -> int:
                     apply=args.apply,
                 )
             elif args.command == "status":
+                if args.limit <= 0:
+                    raise NasKbError("status --limit must be greater than 0")
                 payload = {
                     "ok": True,
                     "scope": {"app_id": args.app_id, "project_id": args.project_id},
@@ -1092,12 +1121,12 @@ def main(argv: list[str] | None = None) -> int:
 
 def emit(as_json: bool, payload: dict[str, Any]) -> None:
     if as_json:
-        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
         return
     if not payload.get("ok", True):
         print(f"error: {payload.get('message', 'unknown error')}", file=sys.stderr)
         return
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
 
 
 if __name__ == "__main__":

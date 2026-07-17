@@ -6,8 +6,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 from nas_kb.cli import (
     GatewayServer,
+    NasKbError,
     RemoteItem,
     StateStore,
     discover_documents,
@@ -245,7 +248,7 @@ def test_team_gateway_search_and_source_download(tmp_path):
         state_path=state_path,
         app_id="nas-kb",
         project_id="test",
-        token="team-read-token",
+        token="team-read-token-with-at-least-32-chars",
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -254,7 +257,7 @@ def test_team_gateway_search_and_source_download(tmp_path):
     try:
         result = gateway_search(
             api_url,
-            "team-read-token",
+            "team-read-token-with-at-least-32-chars",
             "how to use",
             method="hybrid",
             top_k=5,
@@ -265,7 +268,7 @@ def test_team_gateway_search_and_source_download(tmp_path):
         output = tmp_path / "guide.md"
         downloaded = gateway_get_source(
             api_url,
-            "team-read-token",
+            "team-read-token-with-at-least-32-chars",
             "d_123456789abc",
             output,
         )
@@ -285,7 +288,7 @@ def test_team_gateway_rejects_missing_token(tmp_path):
         state_path=tmp_path / "state.sqlite",
         app_id="nas-kb",
         project_id="test",
-        token="team-read-token",
+        token="team-read-token-with-at-least-32-chars",
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -306,3 +309,16 @@ def test_team_gateway_rejects_missing_token(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_team_gateway_rejects_short_server_token(tmp_path):
+    with pytest.raises(NasKbError, match="at least 32 characters"):
+        GatewayServer(
+            ("127.0.0.1", 0),
+            nas=FakeNas({}),
+            everos=FakeEverOS(),
+            state_path=tmp_path / "state.sqlite",
+            app_id="nas-kb",
+            project_id="test",
+            token="too-short",
+        )
