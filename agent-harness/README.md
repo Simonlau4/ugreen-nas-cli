@@ -12,6 +12,9 @@ ugnas --help
 ```
 
 The install script creates a venv under `~/.local/share/ugreen-nas-cli` and writes small launcher scripts to `~/.local/bin`.
+It also registers the `cli-anything-ugreen-nas` Skill under
+`$CODEX_HOME/skills` (default: `~/.codex/skills`). Open a new Codex task after
+installation so Codex can discover the Skill.
 
 The package installs two commands:
 

@@ -26,6 +26,24 @@ scripts/setup-profile-macos-keychain.sh \
   --allowed-root "/Agent_Knowledge_Base"
 ```
 
+`scripts/install.sh` installs both the `ugnas` command and the
+`cli-anything-ugreen-nas` Codex Skill. Confirm that
+`~/.codex/skills/cli-anything-ugreen-nas/SKILL.md` exists, then open a new Codex
+task before the Q&A acceptance test.
+
+If the CLI was installed from an earlier repository version, repair only the
+missing Skill from the repository root:
+
+```bash
+python3 scripts/install-codex-skill.py cli-anything-ugreen-nas
+```
+
+On Windows PowerShell, use:
+
+```powershell
+py scripts\install-codex-skill.py cli-anything-ugreen-nas
+```
+
 Repeat `--allowed-root` for an approved project root only when project access is needed. Verify the knowledge root:
 
 ```bash

@@ -70,6 +70,10 @@ cd ugreen-nas-cli/agent-harness
 scripts/install.sh
 ```
 
+The installer also registers the `cli-anything-ugreen-nas` Skill under
+`$CODEX_HOME/skills` (or `~/.codex/skills` when `CODEX_HOME` is unset). Open a
+new Codex task after installation so Codex can discover it.
+
 Configure your own NAS account:
 
 ```bash
@@ -131,6 +135,10 @@ cd ../nas-kb
 scripts/install.sh
 nas-kb --json doctor --path "/Team/Knowledge/Published"
 ```
+
+This separate installer registers the optional `nas-knowledge-base` Skill. Do
+not install that Skill on a teammate machine unless the `nas-kb` command and
+gateway connection are also configured.
 
 Create the private sync configuration and preview it before the first index:
 
@@ -234,7 +242,7 @@ python -m compileall -q agent-harness/cli_anything nas-kb/nas_kb
 bash -n agent-harness/scripts/install.sh
 bash -n nas-kb/scripts/install.sh
 bash -n agent-harness/scripts/setup-profile-macos-keychain.sh
-python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests -q
+python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests tests -q
 ```
 
 ## Notes

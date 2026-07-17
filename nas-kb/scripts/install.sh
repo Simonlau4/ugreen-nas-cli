@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 PYTHON_BIN="${PYTHON:-python3}"
 INSTALL_HOME="${NAS_KB_INSTALL_HOME:-$HOME/.local/share/nas-kb}"
 BIN_DIR="${NAS_KB_BIN_DIR:-$HOME/.local/bin}"
@@ -23,4 +24,5 @@ mkdir -p "$INSTALL_HOME" "$BIN_DIR"
 "$VENV_DIR/bin/python" -m pip install --upgrade "$ROOT_DIR" >/dev/null
 ln -sfn "$VENV_DIR/bin/nas-kb" "$BIN_DIR/nas-kb"
 "$BIN_DIR/nas-kb" --help >/dev/null
+"$PYTHON_BIN" "$REPO_ROOT/scripts/install-codex-skill.py" nas-knowledge-base
 echo "Installed nas-kb to $BIN_DIR/nas-kb"

@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HARNESS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$HARNESS_DIR/.." && pwd)"
 PYTHON_BIN="${PYTHON:-python3}"
 INSTALL_HOME="${UGNAS_INSTALL_HOME:-$HOME/.local/share/ugreen-nas-cli}"
 BIN_DIR="${UGNAS_BIN_DIR:-$HOME/.local/bin}"
@@ -40,6 +41,7 @@ EOF
 chmod 755 "$BIN_DIR/ugnas" "$BIN_DIR/cli-anything-ugreen-nas" "$BIN_DIR/nas-cli"
 
 "$BIN_DIR/ugnas" --help >/dev/null
+"$PYTHON_BIN" "$REPO_ROOT/scripts/install-codex-skill.py" cli-anything-ugreen-nas
 
 echo "Installed ugnas to $BIN_DIR/ugnas"
 echo "Installed cli-anything-ugreen-nas to $BIN_DIR/cli-anything-ugreen-nas"
