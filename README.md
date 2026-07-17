@@ -89,9 +89,12 @@ scripts/setup-profile-macos-keychain.sh \
 Verify:
 
 ```bash
-ugnas --profile default --json doctor
+ugnas --profile default --json doctor --path "/Shared"
+ugnas --profile default --json capabilities
 ugnas --profile default --json ls "/Shared"
 ```
+
+For administrator and teammate rollout, follow [`docs/team-onboarding.md`](docs/team-onboarding.md).
 
 ## Giving It To An AI Agent
 
