@@ -6,9 +6,11 @@ The CLI uses each user's own NAS account. Passwords are not stored in this repos
 
 ## Shared knowledge layer
 
-The optional [`nas-kb/`](nas-kb/) package builds an incremental knowledge index from approved NAS Markdown, PDF, and DOCX files. It keeps NAS files as the source of truth, uses EverOS as a rebuildable retrieval layer, and provides an authenticated read-only gateway for team Agents.
+V0.1.0 uses `ugnas` / `nas-cli` as the default team path: each teammate connects with an individual NAS account and reads only explicitly allowed roots.
 
-Use the two layers together:
+The optional [`nas-kb/`](nas-kb/) package adds semantic retrieval when ordinary NAS file search is insufficient. It builds an incremental knowledge index from approved NAS Markdown, PDF, and DOCX files, keeps NAS files as the source of truth, uses EverOS as a rebuildable retrieval layer, and provides an authenticated read-only gateway for team Agents.
+
+When semantic retrieval is needed, the two layers have separate roles:
 
 - `ugnas` / `nas-cli`: each teammate lists, reads, uploads, and updates files with an individual NAS account.
 - `nas-kb`: one central indexer updates approved `Published/` directories and serves shared search context.
@@ -188,7 +190,7 @@ Recommended order:
 
 1. Tailscale or company VPN to reach the NAS WebDAV endpoint
 2. trusted HTTPS certificate and domain name
-3. DDNS with strict firewall rules, only if your team understands the exposure
+3. dynamic DNS with strict firewall rules, only if your team understands the exposure
 
 Avoid plain HTTP and avoid directly publishing NAS services to the public internet unless you have a clear network security plan.
 
@@ -222,12 +224,17 @@ skills/
 
 ## Development
 
+From the repository root:
+
 ```bash
-cd agent-harness
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e . pytest
-python -m pytest cli_anything/ugreen_nas/tests -q
+python -m pip install ./agent-harness ./nas-kb pytest
+python -m compileall -q agent-harness/cli_anything nas-kb/nas_kb
+bash -n agent-harness/scripts/install.sh
+bash -n nas-kb/scripts/install.sh
+bash -n agent-harness/scripts/setup-profile-macos-keychain.sh
+python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests -q
 ```
 
 ## Notes
