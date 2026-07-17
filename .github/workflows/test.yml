@@ -34,4 +34,4 @@ jobs:
       - name: Run tests
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
-        run: python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests -q
+        run: python -m pytest agent-harness/cli_anything/ugreen_nas/tests nas-kb/tests tests -q

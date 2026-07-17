@@ -32,6 +32,10 @@ scripts/install.sh
 nas-kb --json doctor --path "/Team/Knowledge/Published"
 ```
 
+The installer also registers the `nas-knowledge-base` Skill under
+`$CODEX_HOME/skills` (default: `~/.codex/skills`). Open a new Codex task after
+installation so Codex can discover the Skill.
+
 The doctor command checks the NAS path, EverOS, the local state database, and the active EverOS document scope. Fix any failed component before indexing.
 
 ## Workflow
