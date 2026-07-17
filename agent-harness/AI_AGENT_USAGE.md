@@ -8,6 +8,7 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 - Keep global flags before the command.
 - Stay inside the configured shared root, for example `/Shared`.
 - Prefer `ls`, `stat`, and `cat` before any write.
+- Preview writes with global `--dry-run` before executing them.
 - Use `get` before editing binary files such as docx, xlsx, pptx, psd, ai, mov, mp4, or images.
 - Do not use `rm` unless the user explicitly asks to delete something.
 - `rm` requires `--yes`.
@@ -28,6 +29,7 @@ ugnas --profile default --json stat "/Shared/path/to/file.md"
 ugnas --profile default --json cat "/Shared/path/to/file.md"
 ugnas --profile default --json get "/Shared/path/to/file.docx" -o "./file.docx"
 ugnas --profile default --json search "keyword" --under "/Shared" --max-depth 4 --limit 50
+ugnas --profile default --json recent --under "/Shared" --days 7 --max-depth 4 --limit 50
 ```
 
 ## Write Commands
@@ -41,6 +43,16 @@ ugnas --profile default --json cp "/Shared/a.md" "/Shared/a-copy.md"
 ugnas --profile default --json mv "/Shared/a-copy.md" "/Shared/archive/a-copy.md"
 ugnas --profile default --json rm "/Shared/archive/a-copy.md" --yes
 ```
+
+Preview any mutating command by putting `--dry-run` before the command:
+
+```bash
+ugnas --profile default --json --dry-run put "./local.md" "/Shared/NewFolder/local.md"
+ugnas --profile default --json --dry-run mv "/Shared/a.md" "/Shared/archive/a.md"
+ugnas --profile default --json --dry-run rm "/Shared/archive/a.md"
+```
+
+`rm` requires `--yes` only for the real deletion. Never turn a dry-run preview into a real deletion without explicit user approval.
 
 ## Remote Access Notes
 

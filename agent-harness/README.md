@@ -64,7 +64,11 @@ ugnas --profile default --json mv "/Shared/a.md" "/Shared/archive/a.md" --overwr
 ugnas --profile default --json cp "/Shared/a.md" "/Shared/a-copy.md" --overwrite
 ugnas --profile default --json rm "/Shared/a-copy.md" --yes
 ugnas --profile default --json search "contract" --under "/Shared" --max-depth 4
+ugnas --profile default --json recent --under "/Shared" --days 7 --max-depth 4
+ugnas --profile default --json --dry-run rm "/Shared/a-copy.md"
 ```
+
+Place global flags such as `--json` and `--dry-run` before the command. A dry run never writes an audit event because it does not change the NAS.
 
 ## Remote Access Choice
 

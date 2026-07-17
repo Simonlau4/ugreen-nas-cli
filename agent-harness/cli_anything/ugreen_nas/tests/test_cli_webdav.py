@@ -4,6 +4,8 @@ import base64
 import json
 import threading
 import xml.sax.saxutils
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -16,6 +18,12 @@ class Store:
             "/": None,
             "/Team": None,
             "/Team/readme.txt": b"hello",
+        }
+        now = datetime.now(timezone.utc)
+        self.modified = {
+            "/": now,
+            "/Team": now,
+            "/Team/readme.txt": now - timedelta(hours=1),
         }
 
 
@@ -84,6 +92,7 @@ class Handler(BaseHTTPRequestHandler):
             escaped = xml.sax.saxutils.escape(path)
             size = "" if is_dir else f"<d:getcontentlength>{len(data)}</d:getcontentlength>"
             resource_type = "<d:collection/>" if is_dir else ""
+            modified = format_datetime(self.store.modified.get(path, datetime.now(timezone.utc)), usegmt=True)
             responses.append(
                 f"""
                 <d:response>
@@ -93,6 +102,7 @@ class Handler(BaseHTTPRequestHandler):
                       <d:resourcetype>{resource_type}</d:resourcetype>
                       {size}
                       <d:getetag>"{len(path)}"</d:getetag>
+                      <d:getlastmodified>{modified}</d:getlastmodified>
                     </d:prop>
                     <d:status>HTTP/1.1 200 OK</d:status>
                   </d:propstat>
@@ -149,6 +159,82 @@ def test_path_outside_allowed_root_is_denied(tmp_path, capsys):
         assert main(["--config", str(config), "--json", "ls", "/Other"]) == 2
         payload = json.loads(capsys.readouterr().out)
         assert payload["error"] == "PathAccessError"
+
+
+def test_dry_run_previews_writes_without_mutating(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        local = tmp_path / "upload.txt"
+        local.write_text("preview", encoding="utf-8")
+
+        assert main(
+            [
+                "--config",
+                str(config),
+                "--json",
+                "--dry-run",
+                "put",
+                str(local),
+                "/Team/upload.txt",
+            ]
+        ) == 0
+        preview = json.loads(capsys.readouterr().out)
+        assert preview == {
+            "action": "put",
+            "bytes": 7,
+            "dry_run": True,
+            "local_path": str(local),
+            "ok": True,
+            "overwrite": False,
+            "remote_path": "/Team/upload.txt",
+        }
+        assert "/Team/upload.txt" not in Handler.store.items
+
+        assert main(
+            ["--config", str(config), "--json", "--dry-run", "rm", "/Team/readme.txt"]
+        ) == 0
+        preview = json.loads(capsys.readouterr().out)
+        assert preview["action"] == "rm"
+        assert "/Team/readme.txt" in Handler.store.items
+
+        cases = [
+            (["mkdir", "/Team/NewFolder"], "mkdir"),
+            (["edit", "/Team/readme.txt"], "edit"),
+            (["mv", "/Team/readme.txt", "/Team/moved.txt"], "mv"),
+            (["cp", "/Team/readme.txt", "/Team/copied.txt"], "cp"),
+        ]
+        for command, expected_action in cases:
+            assert main(
+                ["--config", str(config), "--json", "--dry-run", *command]
+            ) == 0
+            preview = json.loads(capsys.readouterr().out)
+            assert preview["action"] == expected_action
+            assert preview["dry_run"] is True
+
+
+def test_recent_returns_only_files_inside_window(tmp_path, capsys):
+    with webdav_server() as base_url:
+        config = write_config(tmp_path, base_url)
+        Handler.store.items["/Team/old.txt"] = b"old"
+        Handler.store.modified["/Team/old.txt"] = datetime.now(timezone.utc) - timedelta(days=30)
+
+        assert main(
+            [
+                "--config",
+                str(config),
+                "--json",
+                "recent",
+                "--under",
+                "/Team",
+                "--days",
+                "2",
+            ]
+        ) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert [item["path"] for item in payload["items"]] == ["/Team/readme.txt"]
+        assert payload["scanned_files"] == 2
+        assert payload["matched_files"] == 1
+        assert payload["truncated"] is False
 
 
 class webdav_server:

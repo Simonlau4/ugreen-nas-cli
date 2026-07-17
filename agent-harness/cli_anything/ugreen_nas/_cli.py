@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", type=Path, help="Config file path.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument("--timeout", type=float, help="HTTP timeout in seconds.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview a mutating command without changing the NAS.",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     profile = subparsers.add_parser("profile-init", help="Write a local profile without storing a password.")
@@ -114,6 +121,12 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--max-depth", type=int, default=4)
     search.add_argument("--limit", type=int, default=100)
 
+    recent = subparsers.add_parser("recent", help="List recently modified files under a directory.")
+    recent.add_argument("--under", required=True)
+    recent.add_argument("--days", type=float, default=7)
+    recent.add_argument("--max-depth", type=int, default=4)
+    recent.add_argument("--limit", type=int, default=100)
+
     return parser
 
 
@@ -123,6 +136,12 @@ def run(args: argparse.Namespace) -> int:
 
     profile = load_profile(args.profile, args.config, args.timeout)
     client = WebDavClient(profile)
+
+    mutating_commands = {"put", "edit", "mkdir", "mv", "cp", "rm"}
+    if args.dry_run:
+        if args.command not in mutating_commands:
+            raise ConfigError("--dry-run is only supported for put, edit, mkdir, mv, cp, and rm")
+        return cmd_dry_run(args, profile)
 
     if args.command == "doctor":
         return cmd_doctor(args, profile, client)
@@ -187,6 +206,8 @@ def run(args: argparse.Namespace) -> int:
         return emit(args, {"ok": True, "path": path}, f"deleted {path}")
     if args.command == "search":
         return cmd_search(args, profile, client)
+    if args.command == "recent":
+        return cmd_recent(args, profile, client)
 
     raise ConfigError(f"unknown command: {args.command}")
 
@@ -209,6 +230,44 @@ def cmd_profile_init(args: argparse.Namespace) -> int:
     )
     payload = {"ok": True, "config": str(path), "profile": args.profile}
     return emit(args, payload, f"wrote profile {args.profile} to {path}")
+
+
+def cmd_dry_run(args: argparse.Namespace, profile) -> int:
+    payload: dict[str, Any] = {
+        "ok": True,
+        "dry_run": True,
+        "action": args.command,
+    }
+    if args.command == "put":
+        remote = assert_allowed(args.remote_path, profile.allowed_roots)
+        payload.update(
+            {
+                "local_path": args.local_path,
+                "remote_path": remote,
+                "overwrite": args.overwrite,
+                "bytes": None if args.local_path == "-" else Path(args.local_path).stat().st_size,
+            }
+        )
+    elif args.command == "edit":
+        payload.update(
+            {
+                "remote_path": assert_allowed(args.remote_path, profile.allowed_roots),
+                "create": args.create,
+            }
+        )
+    elif args.command == "mkdir":
+        payload["remote_path"] = assert_allowed(args.remote_path, profile.allowed_roots)
+    elif args.command in {"mv", "cp"}:
+        payload.update(
+            {
+                "src": assert_allowed(args.src, profile.allowed_roots),
+                "dst": assert_allowed(args.dst, profile.allowed_roots),
+                "overwrite": args.overwrite,
+            }
+        )
+    elif args.command == "rm":
+        payload["remote_path"] = assert_allowed(args.remote_path, profile.allowed_roots)
+    return emit(args, payload, f"dry-run: {args.command}")
 
 
 def cmd_doctor(args: argparse.Namespace, profile, client: WebDavClient) -> int:
@@ -332,6 +391,70 @@ def cmd_search(args: argparse.Namespace, profile, client: WebDavClient) -> int:
                 queue.append((item.path, depth + 1))
     payload = {"ok": True, "matches": [item_to_json(item) for item in matches]}
     return emit(args, payload, _format_items(matches))
+
+
+def cmd_recent(args: argparse.Namespace, profile, client: WebDavClient) -> int:
+    if args.days <= 0:
+        raise ConfigError("recent --days must be greater than 0")
+    if args.max_depth < 0:
+        raise ConfigError("recent --max-depth must be 0 or greater")
+    if args.limit <= 0:
+        raise ConfigError("recent --limit must be greater than 0")
+
+    start = assert_allowed(args.under, profile.allowed_roots)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
+    queue: list[tuple[str, int]] = [(start, 0)]
+    seen = set()
+    matches: list[tuple[datetime, WebDavItem]] = []
+    scanned_files = 0
+
+    while queue:
+        current, depth = queue.pop(0)
+        if current in seen or depth > args.max_depth:
+            continue
+        seen.add(current)
+        try:
+            items = client.propfind(current, depth="1")
+        except WebDavError as exc:
+            if exc.status == 404:
+                continue
+            raise
+        for item in items:
+            if item.path == current:
+                continue
+            if item.is_dir:
+                if depth < args.max_depth:
+                    queue.append((item.path, depth + 1))
+                continue
+            scanned_files += 1
+            modified = _parse_modified(item.modified)
+            if modified is not None and modified >= cutoff:
+                matches.append((modified, item))
+
+    matches.sort(key=lambda pair: pair[0], reverse=True)
+    recent_items = [item for _, item in matches[: args.limit]]
+    payload = {
+        "ok": True,
+        "under": start,
+        "cutoff": cutoff.isoformat(),
+        "scanned_files": scanned_files,
+        "matched_files": len(matches),
+        "truncated": len(matches) > args.limit,
+        "items": [item_to_json(item) for item in recent_items],
+    }
+    return emit(args, payload, _format_items(recent_items))
+
+
+def _parse_modified(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def audit(profile, action: str, **fields: Any) -> None:
