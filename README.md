@@ -60,6 +60,29 @@ For remote use, prefer Tailscale or a company VPN so the WebDAV service is not e
 
 macOS is required only for the included Keychain helper. The CLI itself also runs on Linux when credentials are supplied through environment variables or another local password command.
 
+## Codex Skills
+
+This repository contains two Codex Skills. They are installed separately because
+they depend on different command-line tools.
+
+| Skill | Who needs it | What it does | Required command |
+| --- | --- | --- | --- |
+| `cli-anything-ugreen-nas` | **Required for every teammate in the current pilot.** | Guides the Agent to check the personal NAS connection and allowed roots, load the shared Agent knowledge entry, search and read source files, preserve NAS source paths in answers, and safely perform authorized file operations. | `ugnas` / `nas-cli` |
+| `nas-knowledge-base` | **Optional.** Install only on the central indexer or an Agent machine configured to use the shared semantic-search gateway. | Guides semantic search across approved NAS Markdown, PDF, and DOCX content, incremental indexing, index health checks, and retrieval of the current NAS original behind a search result. | `nas-kb`; local indexing also requires EverOS |
+
+For the current teammate connection and Q&A pilot, install only
+`cli-anything-ugreen-nas`. Ordinary NAS access and the startup acceptance test
+do not require `nas-knowledge-base`.
+
+The installers register the matching Skill automatically:
+
+- `agent-harness/scripts/install.sh` installs `ugnas` and
+  `cli-anything-ugreen-nas`.
+- `nas-kb/scripts/install.sh` installs `nas-kb` and
+  `nas-knowledge-base`.
+
+Open a new Codex task after installation so Codex can discover the Skill.
+
 ## Quick Start
 
 Clone and install:
