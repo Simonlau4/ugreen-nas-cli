@@ -14,6 +14,19 @@ The current team pilot covers connection and read-only knowledge Q&A. File write
 
 The Agent knowledge base contains the shared entry, project navigation, and approved startup test material. Department and project source files remain in their own NAS roots.
 
+## Skills required for the current pilot
+
+- Install `cli-anything-ugreen-nas` for every teammate. It guides the Agent to
+  verify the personal NAS connection and allowed roots, load the shared
+  knowledge entry, read current source files, preserve NAS paths in answers,
+  and safely use authorized file operations.
+- Do not install `nas-knowledge-base` for the current pilot. It is an optional
+  semantic-search Skill for the central indexer or an Agent machine that
+  already has the `nas-kb` command and shared gateway connection.
+
+See the repository [Codex Skills overview](../README.md#codex-skills) for the
+runtime dependency and installation mapping for each Skill.
+
 ## Teammate setup on macOS
 
 ```bash
