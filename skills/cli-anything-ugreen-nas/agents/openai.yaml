@@ -1,0 +1,4 @@
+interface:
+  display_name: "UGREEN NAS"
+  short_description: "Search, retrieve, and safely manage files on UGREEN NAS"
+  default_prompt: "Use $cli-anything-ugreen-nas to find recent NAS assets and preview any file changes."

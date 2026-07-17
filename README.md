@@ -29,6 +29,8 @@ ugnas --profile default --json cp "/Shared/a.md" "/Shared/a-copy.md"
 ugnas --profile default --json mv "/Shared/a-copy.md" "/Shared/archive/a-copy.md"
 ugnas --profile default --json rm "/Shared/archive/a-copy.md" --yes
 ugnas --profile default --json search "contract" --under "/Shared" --max-depth 4
+ugnas --profile default --json recent --under "/Shared" --days 7 --max-depth 4
+ugnas --profile default --json --dry-run mv "/Shared/draft.md" "/Shared/archive/draft.md"
 ```
 
 ## Requirements
@@ -114,6 +116,7 @@ Avoid plain HTTP and avoid directly publishing NAS services to the public intern
 - `allowed_roots` constrains all remote paths before network requests are made.
 - `rm` requires `--yes`.
 - `put` does not overwrite existing files unless `--overwrite` is provided.
+- `--dry-run` previews `put`, `edit`, `mkdir`, `mv`, `cp`, and `rm` without changing the NAS.
 - Mutating operations append a local audit log by default.
 
 ## Project Layout
