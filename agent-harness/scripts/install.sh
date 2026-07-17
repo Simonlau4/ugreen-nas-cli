@@ -28,12 +28,18 @@ cat > "$BIN_DIR/cli-anything-ugreen-nas" <<EOF
 exec "$VENV_DIR/bin/cli-anything-ugreen-nas" "\$@"
 EOF
 
-chmod 755 "$BIN_DIR/ugnas" "$BIN_DIR/cli-anything-ugreen-nas"
+cat > "$BIN_DIR/nas-cli" <<EOF
+#!/usr/bin/env bash
+exec "$VENV_DIR/bin/ugnas" "\$@"
+EOF
+
+chmod 755 "$BIN_DIR/ugnas" "$BIN_DIR/cli-anything-ugreen-nas" "$BIN_DIR/nas-cli"
 
 "$BIN_DIR/ugnas" --help >/dev/null
 
 echo "Installed ugnas to $BIN_DIR/ugnas"
 echo "Installed cli-anything-ugreen-nas to $BIN_DIR/cli-anything-ugreen-nas"
+echo "Installed nas-cli compatibility entry to $BIN_DIR/nas-cli"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Add $BIN_DIR to PATH if your shell cannot find ugnas." ;;

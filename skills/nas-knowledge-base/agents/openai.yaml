@@ -1,0 +1,4 @@
+interface:
+  display_name: "NAS Knowledge Base"
+  short_description: "Search shared NAS knowledge and retrieve authoritative source files"
+  default_prompt: "Use $nas-knowledge-base to search the approved NAS knowledge index and preserve each result's original NAS path."

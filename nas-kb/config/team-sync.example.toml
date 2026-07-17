@@ -1,0 +1,16 @@
+# Copy this file outside the repository and keep only approved Published roots.
+
+[[roots]]
+path = "/Team-A/Knowledge/Published"
+max_depth = 4
+limit = 100
+extensions = ["md", "pdf", "docx"]
+max_bytes = 52428800
+category_id = "Business"
+
+[[roots]]
+path = "/Team-B/Knowledge/Published"
+max_depth = 4
+limit = 100
+extensions = ["md", "pdf", "docx"]
+max_bytes = 52428800
