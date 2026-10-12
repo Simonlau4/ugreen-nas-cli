@@ -93,7 +93,7 @@ The NAS file is immediately available to authorized Agents and remains the sourc
 
 ## Give access to an AI Agent
 
-Give the Agent `agent-harness/AI_AGENT_USAGE.md` and the configured profile name. The Agent should begin every new environment with:
+Give the Agent `agent-harness/AI_AGENT_USAGE.md` and the configured profile name. For first-time onboarding and its acceptance test, the Agent begins with:
 
 ```bash
 ugnas --profile default --json doctor --path "/Agent_Knowledge_Base"
@@ -103,7 +103,7 @@ ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
 ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
 ```
 
-This direct NAS workflow is the default team knowledge path. Do not use a department project as the team-level entry, and do not scan NAS `/`.
+This is the team onboarding workflow. For later tasks where the user supplies a project path, check that exact path against `capabilities` and `doctor --path`, then operate inside the assigned scope. The shared entry is unnecessary for those tasks. A failed onboarding check stops that test; it does not block another project whose access has been independently verified. Do not scan NAS `/` to find a substitute onboarding entry.
 
 ## Q&A acceptance test
 

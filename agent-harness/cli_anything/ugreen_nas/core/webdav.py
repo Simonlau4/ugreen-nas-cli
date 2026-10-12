@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 import copy
+import re
 import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .config import Profile
@@ -66,6 +68,41 @@ class WebDavClient:
     def get(self, path: str) -> bytes:
         _, _, body = self.request("GET", path, expected={200})
         return body
+
+    def download(self, path: str, partial: Path, item: WebDavItem) -> None:
+        offset = partial.stat().st_size if partial.exists() else 0
+        validator = item.etag or item.modified
+        headers = {"Authorization": self._auth_header(), "User-Agent": "ugreen-nas-cli/0.1.0"}
+        if offset and validator:
+            headers.update({"Range": f"bytes={offset}-", "If-Range": validator})
+        else:
+            offset = 0
+        if item.etag:
+            headers["If-Match"] = item.etag
+        request = urllib.request.Request(self.url_for(path), headers=headers, method="GET")
+        context = None if self.profile.verify_tls else ssl._create_unverified_context()
+        try:
+            with urllib.request.urlopen(request, timeout=self.profile.timeout, context=context) as response:
+                if response.status == 206:
+                    content_range = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", response.headers.get("Content-Range", ""))
+                    if not content_range or int(content_range[1]) != offset:
+                        raise WebDavError("invalid resume Content-Range")
+                    if item.size is not None and int(content_range[3]) != item.size:
+                        raise WebDavError("remote size changed during download")
+                elif response.status == 200:
+                    offset = 0
+                else:
+                    raise WebDavError(f"GET failed with HTTP {response.status}", response.status)
+                with partial.open("ab" if offset else "wb") as handle:
+                    partial.chmod(0o600)
+                    while chunk := response.read(1024 * 1024):
+                        handle.write(chunk)
+        except urllib.error.HTTPError as exc:
+            raise WebDavError(f"GET failed with HTTP {exc.code}", exc.code) from exc
+        except urllib.error.URLError as exc:
+            raise WebDavError(f"network error: {exc.reason}") from exc
+        if item.size is not None and partial.stat().st_size != item.size:
+            raise WebDavError("download is incomplete; use --resume")
 
     def put(self, path: str, data: bytes, overwrite: bool = False, etag: str | None = None) -> None:
         headers: dict[str, str] = {}

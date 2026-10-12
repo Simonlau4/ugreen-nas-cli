@@ -35,6 +35,9 @@ ugnas --profile default --json doctor
 ugnas --profile default --json ls "/Shared"
 ugnas --profile default --json cat "/Shared/brief.md"
 ugnas --profile default --json get "/Shared/report.docx" -o ./report.docx
+ugnas --profile default --json scan --under "/Shared" -o manifest.json
+ugnas --profile default --json get-many --manifest manifest.json -o ./download --workers 4
+ugnas --profile default --json get-many --manifest manifest.json -o ./download --resume
 ugnas --profile default --json put ./draft.md "/Shared/draft.md"
 ugnas --profile default --json edit "/Shared/notes.md"
 ugnas --profile default --json mkdir "/Shared/NewFolder"
@@ -45,6 +48,12 @@ ugnas --profile default --json search "contract" --under "/Shared" --max-depth 4
 ugnas --profile default --json recent --under "/Shared" --days 7 --max-depth 4
 ugnas --profile default --json --dry-run mv "/Shared/draft.md" "/Shared/archive/draft.md"
 ```
+
+`scan` lists every depth inside the specified roots; omit `--under` to use the profile's allowed roots. `get-many` mirrors NAS paths under the local output directory, downloads with four workers by default, and keeps a private checkpoint in `.ugnas-downloads/`. Use one active download process per output directory. `--resume` rechecks remote metadata, reuses completed files, and resumes partial files when the server supports Range; changed remote files restart. Existing or manually edited local files still require `--overwrite`.
+
+Agents can share a scan manifest even when they use different NAS accounts or connection addresses. A manifest supplies paths; each download checks the current profile's allowed roots and the current NAS account's actual access.
+
+`search` and `recent` default to depth 4 and 100 results; `--all` removes those bounds. Search checks filenames. A skipped directory, depth bound, or result limit produces `complete: false` and exit code 3, with `errors`, `depth_limited`, and `truncated` explaining the coverage. Readable siblings remain available when a directory returns 403 or 404. A 401 credential failure stops requests. A complete scan describes the directories actually read during that run; it is not a frozen NAS snapshot.
 
 ## Requirements
 

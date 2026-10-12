@@ -15,7 +15,9 @@ from typing import Any
 
 from .core.audit import append_audit
 from .core.config import ConfigError, load_profile, macos_keychain_password_command, write_profile
+from .core.downloads import download_many
 from .core.paths import PathAccessError, assert_allowed
+from .core.scan import scan_tree
 from .core.webdav import WebDavClient, WebDavError, WebDavItem
 
 
@@ -124,15 +126,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     search = subparsers.add_parser("search", help="Bounded recursive file-name search.")
     search.add_argument("query")
-    search.add_argument("--under", default="/")
+    search.add_argument("--under", action="append", help="Root to search; defaults to configured allowed roots.")
     search.add_argument("--max-depth", type=int, default=4)
     search.add_argument("--limit", type=int, default=100)
+    search.add_argument("--all", action="store_true", help="Search every depth and return all matches.")
+    search.add_argument("--workers", type=int, default=4)
 
     recent = subparsers.add_parser("recent", help="List recently modified files under a directory.")
     recent.add_argument("--under", required=True)
     recent.add_argument("--days", type=float, default=7)
     recent.add_argument("--max-depth", type=int, default=4)
     recent.add_argument("--limit", type=int, default=100)
+    recent.add_argument("--all", action="store_true", help="Scan every depth and return all recent files.")
+    recent.add_argument("--workers", type=int, default=4)
+
+    scan = subparsers.add_parser("scan", help="Build a complete recursive file and directory manifest.")
+    scan.add_argument("--under", action="append", help="Root to scan; defaults to configured allowed roots.")
+    scan.add_argument("--max-depth", type=int, help="Optional depth bound; defaults to every depth.")
+    scan.add_argument("--workers", type=int, default=4)
+    scan.add_argument("-o", "--output", type=Path)
+    scan.add_argument("--overwrite", action="store_true")
+
+    bulk = subparsers.add_parser("get-many", help="Download files or a scan manifest with resumable parallel reads.")
+    bulk.add_argument("remote_paths", nargs="*")
+    bulk.add_argument("--manifest", type=Path)
+    bulk.add_argument("-o", "--output", type=Path, required=True)
+    bulk.add_argument("--workers", type=int, default=4)
+    bulk.add_argument("--resume", action="store_true")
+    bulk.add_argument("--overwrite", action="store_true")
 
     return parser
 
@@ -217,6 +238,10 @@ def run(args: argparse.Namespace) -> int:
         return cmd_search(args, profile, client)
     if args.command == "recent":
         return cmd_recent(args, profile, client)
+    if args.command == "scan":
+        return cmd_scan(args, profile, client)
+    if args.command == "get-many":
+        return cmd_get_many(args, profile, client)
 
     raise ConfigError(f"unknown command: {args.command}")
 
@@ -284,9 +309,10 @@ def cmd_capabilities(args: argparse.Namespace, profile) -> int:
         "ok": True,
         "profile": profile.name,
         "allowed_roots": profile.allowed_roots,
-        "read_commands": ["doctor", "capabilities", "ls", "stat", "cat", "get", "search", "recent"],
+        "read_commands": ["doctor", "capabilities", "ls", "stat", "cat", "get", "search", "recent", "scan", "get-many"],
         "write_commands": ["put", "edit", "mkdir", "mv", "cp"],
         "dangerous_commands": ["rm"],
+        "bulk_read": {"default_workers": 4, "partial_exit_code": 3, "resume": "get-many --resume"},
         "safety": {
             "global_flags_before_command": True,
             "preview_writes_with": "--dry-run",
@@ -405,34 +431,17 @@ def cmd_search(args: argparse.Namespace, profile, client: WebDavClient) -> int:
     if args.limit <= 0:
         raise ConfigError("search --limit must be greater than 0")
 
-    start = assert_allowed(args.under, profile.allowed_roots)
     query = args.query.strip().lower()
-    queue: list[tuple[str, int]] = [(start, 0)]
-    seen = set()
-    matches: list[WebDavItem] = []
-    while queue and len(matches) < args.limit:
-        current, depth = queue.pop(0)
-        if current in seen or depth > args.max_depth:
-            continue
-        seen.add(current)
-        try:
-            items = client.propfind(current, depth="1")
-        except WebDavError as exc:
-            if exc.status == 404:
-                continue
-            raise
-        for item in items:
-            if item.path == current:
-                continue
-            name = item.path.rstrip("/").split("/")[-1].lower()
-            if query in name:
-                matches.append(item)
-                if len(matches) >= args.limit:
-                    break
-            if item.is_dir and depth < args.max_depth:
-                queue.append((item.path, depth + 1))
-    payload = {"ok": True, "matches": [item_to_json(item) for item in matches]}
-    return emit(args, payload, _format_items(matches))
+    result = scan_tree(
+        client, profile, args.under or list(profile.allowed_roots),
+        max_depth=None if args.all else args.max_depth,
+        workers=args.workers,
+        match=lambda item: query in item.path.rstrip("/").split("/")[-1].lower(),
+        limit=None if args.all else args.limit,
+    )
+    matches = result.pop("items")
+    payload = {"ok": True, **result, "matches": [item_to_json(item) for item in matches]}
+    return emit_read(args, payload, _format_items(matches))
 
 
 def cmd_recent(args: argparse.Namespace, profile, client: WebDavClient) -> int:
@@ -445,46 +454,72 @@ def cmd_recent(args: argparse.Namespace, profile, client: WebDavClient) -> int:
 
     start = assert_allowed(args.under, profile.allowed_roots)
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
-    queue: list[tuple[str, int]] = [(start, 0)]
-    seen = set()
-    matches: list[tuple[datetime, WebDavItem]] = []
-    scanned_files = 0
-
-    while queue:
-        current, depth = queue.pop(0)
-        if current in seen or depth > args.max_depth:
-            continue
-        seen.add(current)
-        try:
-            items = client.propfind(current, depth="1")
-        except WebDavError as exc:
-            if exc.status == 404:
-                continue
-            raise
-        for item in items:
-            if item.path == current:
-                continue
-            if item.is_dir:
-                if depth < args.max_depth:
-                    queue.append((item.path, depth + 1))
-                continue
-            scanned_files += 1
-            modified = _parse_modified(item.modified)
-            if modified is not None and modified >= cutoff:
-                matches.append((modified, item))
-
-    matches.sort(key=lambda pair: pair[0], reverse=True)
-    recent_items = [item for _, item in matches[: args.limit]]
+    result = scan_tree(client, profile, [start], max_depth=None if args.all else args.max_depth, workers=args.workers)
+    files = [item for item in result.pop("items") if not item.is_dir]
+    matches = [(modified, item) for item in files if (modified := _parse_modified(item.modified)) is not None and modified >= cutoff]
+    matches.sort(key=lambda pair: (pair[0], pair[1].path), reverse=True)
+    recent_items = [item for _, item in (matches if args.all else matches[: args.limit])]
+    truncated = len(recent_items) < len(matches)
     payload = {
         "ok": True,
+        **result,
         "under": start,
         "cutoff": cutoff.isoformat(),
-        "scanned_files": scanned_files,
+        "scanned_files": len(files),
         "matched_files": len(matches),
-        "truncated": len(matches) > args.limit,
+        "truncated": truncated,
+        "complete": result["complete"] and not truncated,
         "items": [item_to_json(item) for item in recent_items],
     }
-    return emit(args, payload, _format_items(recent_items))
+    return emit_read(args, payload, _format_items(recent_items))
+
+
+def cmd_scan(args: argparse.Namespace, profile, client: WebDavClient) -> int:
+    if args.output and args.output.exists() and not args.overwrite:
+        raise ConfigError(f"output exists; use --overwrite: {args.output}")
+    result = scan_tree(client, profile, args.under or list(profile.allowed_roots), max_depth=args.max_depth, workers=args.workers)
+    items = result.pop("items")
+    payload = {
+        "ok": True, **result,
+        "source": {"base_url": profile.base_url, "username": profile.username},
+        "items": [item_to_json(item) for item in items],
+    }
+    if args.output:
+        with args.output.open("x" if not args.overwrite else "w", encoding="utf-8") as handle:
+            args.output.chmod(0o600)
+            json.dump(payload, handle, ensure_ascii=False)
+    return emit_read(args, payload, _format_items(items))
+
+
+def cmd_get_many(args: argparse.Namespace, profile, client: WebDavClient) -> int:
+    if bool(args.manifest) == bool(args.remote_paths):
+        raise ConfigError("provide file paths or --manifest, but not both")
+    source_complete = True
+    source_errors = []
+    paths = args.remote_paths
+    if args.manifest:
+        try:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            paths = [item["path"] for item in manifest["items"] if item["type"] == "file"]
+            if not all(isinstance(path, str) for path in paths):
+                raise ValueError("manifest paths must be strings")
+            source_complete = manifest["complete"] is True
+            source_errors = manifest.get("errors", [])
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ConfigError(f"invalid scan manifest: {exc}") from exc
+    results = download_many(client, profile, paths, args.output, workers=args.workers, resume=args.resume, overwrite=args.overwrite)
+    complete = source_complete and all(item["ok"] for item in results)
+    payload = {"ok": True, "complete": complete, "source_complete": source_complete, "source_errors": source_errors, "items": results}
+    return emit_read(args, payload, json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def emit_read(args: argparse.Namespace, payload: dict, human: str) -> int:
+    code = emit(args, payload, human)
+    if not payload["complete"]:
+        if not args.json:
+            print("Incomplete result: inspect errors, depth_limited and truncated using --json.", file=sys.stderr)
+        return 3
+    return code
 
 
 def _parse_modified(value: str | None) -> datetime | None:

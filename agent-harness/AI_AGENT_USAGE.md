@@ -16,7 +16,7 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 
 ## Team startup
 
-For the team Agent setup, start every new environment with:
+For first-time team onboarding and the startup acceptance test, start with:
 
 ```bash
 ugnas --profile default --json doctor --path "/Agent_Knowledge_Base"
@@ -26,18 +26,34 @@ ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
 ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
 ```
 
-For a project question, choose the relevant project from `PROJECTS.md`, then verify that exact project root:
+For a project question without an assigned path, choose the relevant project from `PROJECTS.md`, then verify that exact project root:
 
 ```bash
 ugnas --profile default --json doctor --path "/YOUR_TEAM_ROOT"
 ```
 
-`PROJECTS.md` provides navigation; it does not grant access. If the knowledge root returns `401`, `403`, or `404`, report the missing permission and stop. Do not scan `/` or use a department project as the team entry.
+`PROJECTS.md` provides navigation; it does not grant access. If the knowledge root returns `401`, `403`, or `404`, report the failed check and stop the onboarding test. A 404 can mean the directory is absent. Do not scan `/` to discover a substitute team entry.
+
+## Direct project tasks and complete reads
+
+For a user-specified NAS path, check `capabilities` and `doctor --path` for that exact path, then work within the assigned scope. The shared entry and project navigation are unnecessary for this flow. A failed onboarding check does not prevent an independently authorized project task.
+
+```bash
+ugnas --profile default --json doctor --path "/AssignedRoot"
+ugnas --profile default --json search "keyword" --under "/AssignedRoot" --all
+ugnas --profile default --json scan --under "/AssignedRoot" -o manifest.json
+ugnas --profile default --json get-many --manifest manifest.json -o ./download --workers 4
+ugnas --profile default --json get-many --manifest manifest.json -o ./download --resume
+```
+
+Use a separate local output directory per Agent. Downloads mirror NAS paths inside that directory. `--resume` reuses completed files and resumes partial bytes where WebDAV supports Range; a changed remote version restarts the file. Existing or manually edited local files require `--overwrite`.
+
+Exit code 3 means partial results. Inspect `complete`, `truncated`, `depth_limited`, and `errors` and report the actual coverage. Search defaults to depth 4 and 100 matches; `--all` removes both bounds inside the assigned root. Scanning skips denied directories and continues readable siblings; failed credentials (401) stop requests.
 
 ## Answer questions with NAS knowledge
 
 1. For the startup test, read `STARTUP_TEST_KNOWLEDGE.md` from its exact path.
-2. For a project question, select the authorized project root from `PROJECTS.md`, then use `search`, `recent`, `ls`, and `stat` inside that root.
+2. Use the assigned root, or select an authorized root from `PROJECTS.md` when needed, then verify access and use `search`, `recent`, `ls`, and `stat` inside that root.
 3. Read the current source with `cat`, or download a binary file with `get` before analyzing it.
 4. Answer from the file contents and include the key NAS source paths.
 5. If the available files are insufficient, state what is missing. Do not guess or expand the search beyond the configured roots.

@@ -2,6 +2,21 @@
 
 这个工具的目标不是做成正式开源项目，而是让公司内部同事和他们自己的 AI Agent 稳定访问、稳定使用 NAS。后续优化优先解决真实使用里的连接、配置、权限和误操作问题。
 
+## 2026-10-12 修复后的访问能力
+
+本地修复基于 `835ad7a622491cd1a670510be891d3b92079c365`，CLI 与配套 Skill 已安装到本机。
+
+- `scan` 生成完整目录与文件清单，默认不限深度；`search` 和 `recent` 通过 `--all` 查询全部深度和结果。省略搜索根时使用 profile 已配置的允许目录。
+- 扫描与批量下载默认使用 4 个并发请求，可用 `--workers` 调整。目录返回 403 或 404 后继续可读同级目录；401 凭据失败停止请求。请求层没有主动请求限流或固定等待。
+- 深度限制、结果数量截断或跳过项会返回 `complete: false` 和退出码 3，分别通过 `depth_limited`、`truncated`、`errors` 说明覆盖范围。
+- `get-many` 支持清单或指定文件列表，按 NAS 相对路径保存。`--resume` 核对远端元数据与本地完成记录，支持 Range 续传；服务器忽略 Range 或远端版本变化时重新下载。已有或人工修改的本地文件仍需 `--overwrite`。
+- 用户指定的目录通过 `capabilities` 和 `doctor --path` 验证后可直接操作；共享入口与项目导航用于首次接入与目录发现。
+- 真实 NAS 只读验收覆盖 `/Agent_Knowledge_Base`：完整扫描到 11 个文件、2 个子目录；3 个 Markdown 文件下载后与原文一致，再次执行恢复命令复用这 3 个完成文件。
+
+NAS 账号权限、Agent 任务范围和删除、覆盖保护继续作为访问与修改边界。每个本地下载目录同时只运行一个下载进程；其他账号权限和远程链路吞吐按实际接入场景验收。
+
+入口与参数见 [README](../README.md)；行为回归见 [批量读取测试](../agent-harness/cli_anything/ugreen_nas/tests/test_bulk_reads.py)，Agent 执行流程见 [团队 Skill](../skills/cli-anything-ugreen-nas/SKILL.md)。
+
 ## 优先级 1：先把连接稳定下来
 
 - [ ] 固定推荐连接方式：优先 Tailscale / 公司 VPN，其次同一内网，暂不建议公网 DDNS 直连。
