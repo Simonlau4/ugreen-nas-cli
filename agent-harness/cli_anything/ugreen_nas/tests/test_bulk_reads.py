@@ -6,7 +6,9 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
+from datetime import timedelta
 from http.server import ThreadingHTTPServer
+from unittest.mock import Mock
 
 import pytest
 
@@ -98,6 +100,7 @@ def add(store, path, data=b"file"):
     for count in range(1, len(parts)):
         store.items["/" + "/".join(parts[:count])] = None
     store.items[path] = data
+    store.modified.setdefault(path, store.modified["/"])
 
 
 def call(config, capsys, *command):
@@ -171,7 +174,7 @@ def test_scan_and_download_use_concurrent_requests(server, tmp_path, capsys):
 
 
 @pytest.mark.parametrize("ignore_range", [False, True])
-def test_interrupted_file_resumes_or_restarts_when_range_is_ignored(server, tmp_path, capsys, ignore_range):
+def test_interrupted_file_resumes_or_restarts_when_range_is_ignored(server, tmp_path, capsys, ignore_range, monkeypatch):
     url, store = server
     config = write_config(tmp_path, url)
     path = "/Team/large.bin"
@@ -188,6 +191,9 @@ def test_interrupted_file_resumes_or_restarts_when_range_is_ignored(server, tmp_
     assert code == 0 and (output / "Team/large.bin").read_bytes() == content
     assert ("GET", path, "bytes=2097152-") in store.requests
     gets = sum(method == "GET" for method, _, _ in store.requests)
+    clock = Mock()
+    clock.now.return_value = store.modified["/"] + timedelta(days=1)
+    monkeypatch.setattr("cli_anything.ugreen_nas.tests.test_cli_webdav.datetime", clock)
     code, result = call(config, capsys, "get-many", path, "-o", str(output), "--resume")
     assert code == 0 and result["items"][0]["resumed"]
     assert sum(method == "GET" for method, _, _ in store.requests) == gets
