@@ -139,7 +139,8 @@ For the startup test, configure the shared Agent knowledge root:
 scripts/setup-profile-macos-keychain.sh \
   --base-url https://NAS_IP_OR_DOMAIN:5006 \
   --username YOUR_NAS_USERNAME \
-  --allowed-root "/Agent_Knowledge_Base"
+  --allowed-root "/Agent_Knowledge_Base" \
+  --audit-root "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
 
 ugnas --profile default --json doctor --path "/Agent_Knowledge_Base"
 ugnas --profile default --json capabilities
@@ -244,6 +245,65 @@ Avoid plain HTTP and avoid directly publishing NAS services to the public intern
 - `put` does not overwrite existing files unless `--overwrite` is provided.
 - `--dry-run` previews `put`, `edit`, `mkdir`, `mv`, `cp`, and `rm` without changing the NAS.
 - Mutating operations append a local audit log by default.
+
+## NAS audit archive
+
+Set `audit_root` in each user's profile to archive CLI writes on the NAS:
+
+```toml
+[profile.default]
+# Keep the existing connection and password_command settings.
+allowed_roots = ["/Agent_Knowledge_Base", "/YOUR_APPROVED_PROJECT"]
+audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
+```
+
+The setup script and `profile-init` also accept `--audit-root`. For a short-lived
+process, use `UGREEN_NAS_AUDIT_ROOT`. The archive must be inside `allowed_roots`
+and writable by the personal NAS account; no permissions are changed by the CLI.
+Profiles without `audit_root` retain local-only logging.
+
+`put`, `edit`, `mkdir`, `mv`, `cp`, and `rm` record the NAS username, UTC time,
+command, affected NAS paths, and result. Uploads include byte count, SHA-256,
+and the overwrite flag; edits also include the SHA-256 of the version read
+before editing. File bodies,
+passwords, local upload paths, and authentication headers are excluded.
+
+Each operation writes separate `<event_id>.started.json` and
+`<event_id>.succeeded.json` (or `.failed.json`) files under a UTC date directory.
+Unique IDs and create-only PUTs keep simultaneous users from replacing one
+another's records. A `started` record without a result requires checking the
+target file; it does not prove that the file was changed. `failed` means the
+command failed; after a network interruption the server's final state may
+still need checking.
+
+The start record must be saved before the file operation. If it cannot be
+saved, the command exits 2 without attempting the file change. If the file
+operation succeeds but its completion receipt cannot be saved, the command
+exits 3 with `mutation_applied: true` and the available local/NAS receipt paths.
+Do not repeat the file operation in that case. Read commands, dry runs, and
+unchanged edits create no records. Successful JSON responses include `audit`;
+`capabilities` shows the configured archive root.
+
+Inspect the archive with existing read commands:
+
+```bash
+ugnas --json ls "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
+ugnas --json recent --under "/Agent_Knowledge_Base/CLI_AUDIT_LOGS" --days 7 --all
+ugnas --json cat "/Agent_Knowledge_Base/CLI_AUDIT_LOGS/YYYY-MM-DD/EVENT_ID.succeeded.json"
+```
+
+The CLI blocks file mutations inside the configured archive and moves/deletes
+of its ancestors. NAS permissions still govern access from other tools. This
+is a cooperative CLI activity archive: only upgraded, configured clients are
+covered, and older clients or direct WebDAV access can bypass it. Existing
+activity cannot be reconstructed from these records. Use NAS administrator
+access controls and backups when stronger retention is required.
+
+Before create-only uploads, the client also checks whether the path exists.
+This protects existing files on NAS servers that ignore `If-None-Match: *`.
+The HTTP condition is still sent; on servers that ignore it, a client-side
+existence check cannot make competing writes to the same path atomic. Audit
+records use unique event IDs to avoid sharing a destination path.
 
 ## Project Layout
 

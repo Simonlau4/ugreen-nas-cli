@@ -36,7 +36,8 @@ scripts/install.sh
 scripts/setup-profile-macos-keychain.sh \
   --base-url "https://NAS_TAILSCALE_OR_VPN_ADDRESS:5006" \
   --username "YOUR_NAS_USERNAME" \
-  --allowed-root "/Agent_Knowledge_Base"
+  --allowed-root "/Agent_Knowledge_Base" \
+  --audit-root "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
 ```
 
 `scripts/install.sh` installs both the `ugnas` command and the
@@ -66,6 +67,16 @@ ugnas --profile default --json cat "/Agent_Knowledge_Base/AGENT_ENTRY.md"
 ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
 ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
 ```
+
+For existing installations, update the CLI from the approved repository version
+and add `audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"` to each member's
+existing `[profile.default]` configuration. Preserve the existing credentials
+and authorized roots. Confirm `capabilities.audit.remote_root` and verify an
+authorized upload's `audit.remote_path` by reading that NAS record back.
+The personal account needs write access to the archive. An inaccessible or
+uncreatable archive blocks writes before the business file operation. Do not widen NAS
+permissions as part of setup without administrator approval. See the
+[audit archive behavior and receipt handling](../README.md#nas-audit-archive).
 
 ## Upload or update a knowledge source
 

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .paths import assert_allowed
+
 
 DEFAULT_CONFIG_PATH = Path("~/.config/ugreen-nas-cli/config.toml").expanduser()
 DEFAULT_AUDIT_LOG = Path("~/.local/state/ugreen-nas-cli/audit.log").expanduser()
@@ -28,6 +30,7 @@ class Profile:
     audit_log: Path | None
     verify_tls: bool
     timeout: float
+    audit_root: str | None = None
 
 
 def _truthy(value: str | None) -> bool | None:
@@ -96,6 +99,7 @@ def load_profile(name: str, config_path: Path | None = None, timeout: float | No
 
     audit_log_raw = os.environ.get("UGREEN_NAS_AUDIT_LOG") or profile_data.get("audit_log")
     audit_log = Path(audit_log_raw).expanduser() if audit_log_raw else DEFAULT_AUDIT_LOG
+    audit_root = os.environ.get("UGREEN_NAS_AUDIT_ROOT") or profile_data.get("audit_root")
 
     if not base_url:
         raise ConfigError("missing base_url; set UGREEN_NAS_BASE_URL or run profile-init")
@@ -121,6 +125,7 @@ def load_profile(name: str, config_path: Path | None = None, timeout: float | No
         audit_log=audit_log,
         verify_tls=verify_tls,
         timeout=float(resolved_timeout),
+        audit_root=str(audit_root) if audit_root else None,
     )
 
 
@@ -132,6 +137,7 @@ def write_profile(
     password_command: str | None,
     verify_tls: bool,
     config_path: Path | None = None,
+    audit_root: str | None = None,
 ) -> Path:
     config_path = config_path or DEFAULT_CONFIG_PATH
     existing = _load_toml(config_path)
@@ -145,6 +151,9 @@ def write_profile(
     }
     if password_command:
         profiles[name]["password_command"] = password_command
+    audit_root = audit_root or existing.get("profile", {}).get(name, {}).get("audit_root")
+    if audit_root:
+        profiles[name]["audit_root"] = assert_allowed(audit_root, tuple(allowed_roots or ["/"]))
 
     lines = [
         "# UGREEN NAS CLI config. Do not store plaintext passwords here.",
@@ -152,7 +161,7 @@ def write_profile(
     ]
     for profile_name, values in sorted(profiles.items()):
         lines.append(f"[profile.{profile_name}]")
-        for key in ("base_url", "username", "password_command", "audit_log"):
+        for key in ("base_url", "username", "password_command", "audit_log", "audit_root"):
             if key in values and values[key] is not None:
                 lines.append(f'{key} = "{_escape_toml(str(values[key]))}"')
         roots = values.get("allowed_roots") or ["/"]
