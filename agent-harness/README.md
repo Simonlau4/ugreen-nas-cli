@@ -40,6 +40,25 @@ The generated config lives at:
 
 The password stays in macOS Keychain.
 
+For team setup, add `--audit-root "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"` and
+include the authorized knowledge root. Follow the
+[team setup and audit acceptance guide](../docs/team-onboarding.md).
+
+## Update An Existing Installation
+
+From a clean repository root, run `git switch main`,
+`git pull --ff-only origin main`, then `cd agent-harness` and
+`scripts/install.sh`. The installer preserves the existing NAS configuration
+and Keychain password; it replaces the repository-managed Skill. Preserve
+personal Skill changes first. Do not rerun the account setup script solely
+to update the tool.
+
+Add `audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"` inside the existing
+profile, keeping its credentials and authorized roots. Confirm
+`capabilities.audit.remote_root` and read back one approved write receipt.
+The [full update guide](../docs/team-onboarding.md#update-an-existing-installation)
+covers allowed roots, profile names, executable selection, and incomplete receipts.
+
 ## Environment Variable Mode
 
 For short-lived tests, environment variables also work:

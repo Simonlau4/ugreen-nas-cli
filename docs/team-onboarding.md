@@ -2,27 +2,32 @@
 
 This repository gives each teammate and their AI Agent a controlled file interface to the NAS. Every person uses an individual NAS account. Do not share one administrator account across the team.
 
-The current team pilot covers connection and read-only knowledge Q&A. File writes and the optional semantic-search gateway are not required for this pilot.
+First-time acceptance covers connection and read-only knowledge Q&A. Team file
+writes use the current CLI with NAS audit logging enabled. Existing users can
+follow [Update an existing installation](#update-an-existing-installation)
+without resetting their account or authorized roots.
 
 ## Administrator preparation
 
 1. Create one NAS account per teammate.
 2. Grant read access to `/Agent_Knowledge_Base`.
+   Members who write files also need read/write access to
+   `/Agent_Knowledge_Base/CLI_AUDIT_LOGS`; this does not require write access to
+   the entire knowledge root.
 3. When project access is needed, grant only the department or project directories required for that person's role.
 4. Provide a WebDAV address reachable through Tailscale or the company VPN.
 5. Send the teammate the knowledge root and assigned project roots, not an unrestricted `/` root.
 
 The Agent knowledge base contains the shared entry, project navigation, and approved startup test material. Department and project source files remain in their own NAS roots.
 
-## Skills required for the current pilot
+## Required Skill
 
 - Install `cli-anything-ugreen-nas` for every teammate. It guides the Agent to
   verify the personal NAS connection and allowed roots, load the shared
   knowledge entry, read current source files, preserve NAS paths in answers,
   and safely use authorized file operations.
-- Do not install `nas-knowledge-base` for the current pilot. It is an optional
-  semantic-search Skill for the central indexer or an Agent machine that
-  already has the `nas-kb` command and shared gateway connection.
+- Do not install `nas-knowledge-base` for the current team deployment. The shared
+  semantic-search service and knowledge gateway were retired on 2026-09-18.
 
 See the repository [Codex Skills overview](../README.md#codex-skills) for the
 runtime dependency and installation mapping for each Skill.
@@ -68,15 +73,88 @@ ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
 ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
 ```
 
-For existing installations, update the CLI from the approved repository version
-and add `audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"` to each member's
-existing `[profile.default]` configuration. Preserve the existing credentials
-and authorized roots. Confirm `capabilities.audit.remote_root` and verify an
-authorized upload's `audit.remote_path` by reading that NAS record back.
-The personal account needs write access to the archive. An inaccessible or
-uncreatable archive blocks writes before the business file operation. Do not widen NAS
-permissions as part of setup without administrator approval. See the
-[audit archive behavior and receipt handling](../README.md#nas-audit-archive).
+The `audit.remote_root` field in `capabilities` must be
+`/Agent_Knowledge_Base/CLI_AUDIT_LOGS` before team file writes. Read-only startup
+acceptance does not create audit records or test write access.
+
+## Update an existing installation
+
+Open the existing repository directory and inspect local changes first:
+
+```bash
+cd /path/to/your/ugreen-nas-cli
+git status --short
+```
+
+Replace the example path with the actual checkout. Preserve any local changes
+before continuing. With a clean checkout, update and reinstall:
+
+```bash
+git switch main
+git pull --ff-only origin main
+cd agent-harness
+scripts/install.sh
+```
+
+The installer replaces CLI launchers and the repository-managed Codex Skill.
+It leaves `~/.config/ugreen-nas-cli/config.toml` and the Keychain password
+untouched. Preserve any personal Skill customizations before reinstalling.
+Do not rerun the account setup script merely to update the CLI. If the old
+checkout is unavailable, clone into a new directory and run only the install
+step; the existing profile remains usable.
+
+In the existing `[profile.default]` section of
+`~/.config/ugreen-nas-cli/config.toml`, add or update this one key:
+
+```toml
+audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
+```
+
+Keep the existing connection, username, password command, TLS settings, and
+authorized roots. Do not create duplicate profile sections or duplicate keys.
+For a named profile, edit that section and use its name with `--profile`.
+If the archive is outside the existing allowed roots, an administrator must
+confirm account access before adding that exact archive path to the roots;
+do not replace the existing roots or grant `/` access.
+
+Check the updated executable and profile:
+
+```bash
+command -v ugnas
+ugnas --profile default --json capabilities
+ugnas --profile default --json doctor --path "/Agent_Knowledge_Base"
+ugnas --profile default --json doctor --path "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
+```
+
+Verify the `audit` field exists and `audit.remote_root` matches the configured
+archive. The package version alone does not establish that auditing is present.
+An unsupported `--audit-root` option or a missing `audit` field means an older
+CLI is still running; check `command -v ugnas` and the shell PATH. Open a new
+Codex task after the Skill is installed.
+
+## Verify an audited write
+
+Use an approved writable project directory and a new, personal test filename.
+Replace the project root and username placeholders below. This creates one
+small file; the read-only startup test above is separate.
+
+```bash
+ugnas --profile default --json doctor --path "/YOUR_APPROVED_PROJECT"
+ugnas --profile default --json --dry-run put - "/YOUR_APPROVED_PROJECT/cli-audit-check-YOUR_NAS_USERNAME.txt"
+printf '%s\n' 'NAS CLI audit check' | ugnas --profile default --json put - "/YOUR_APPROVED_PROJECT/cli-audit-check-YOUR_NAS_USERNAME.txt"
+ugnas --profile default --json cat "/YOUR_APPROVED_PROJECT/cli-audit-check-YOUR_NAS_USERNAME.txt"
+```
+
+Read the `audit.remote_path` returned by the upload with `ugnas --json cat`.
+It must contain the personal NAS username, the exact test path, action `put`,
+and status `succeeded`. Do not delete the test file without approval.
+
+An inaccessible or uncreatable audit archive blocks the file write. Exit code
+3 with `mutation_applied: true` means the file change succeeded but its receipt
+is incomplete: inspect the file and receipt paths, and do not repeat the write.
+No NAS permissions are changed by installation. Older or unconfigured clients
+and historical operations are outside coverage. See the
+[audit archive behavior](../README.md#nas-audit-archive).
 
 ## Upload or update a knowledge source
 
@@ -100,7 +178,7 @@ ugnas --profile default --json --dry-run put "./new-note.md" "/YOUR_TEAM_ROOT/Kn
 ugnas --profile default --json put "./new-note.md" "/YOUR_TEAM_ROOT/Knowledge/new-note.md" --overwrite
 ```
 
-The NAS file is immediately available to authorized Agents and remains the source of truth. If the optional semantic indexer is enabled later, it can detect approved changed files and rebuild its retrieval copy.
+The NAS file is immediately available to authorized Agents and remains the source of truth. Confirm the returned audit receipt after each team write.
 
 ## Give access to an AI Agent
 
@@ -126,28 +204,6 @@ Ask the teammate's Agent one question listed in `STARTUP_TEST_KNOWLEDGE.md`. The
 4. Answers the question and includes the key NAS source path.
 5. Reports missing evidence instead of guessing when the authorized files are insufficient.
 
-If ordinary file search later proves insufficient, an administrator can optionally provide the internal semantic-search gateway URL and a read token through the Agent's secret store. Never paste the NAS password or gateway token into prompts, repositories, or shared documents.
-
-The gateway uses a small HTTP contract that any Agent can call:
-
-```bash
-export NAS_KB_API_URL="http://NAS_KB_TAILSCALE_ADDRESS:8787"
-export NAS_KB_API_TOKEN="read-token-from-secret-store"
-
-curl --silent --show-error \
-  -X POST "$NAS_KB_API_URL/v1/search" \
-  -H "Authorization: Bearer $NAS_KB_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query":"project decisions and constraints","method":"hybrid","top_k":5,"include_content":true}'
-```
-
-Download the authoritative NAS source for a returned `doc_id`:
-
-```bash
-curl --silent --show-error \
-  "$NAS_KB_API_URL/v1/source/DOC_ID" \
-  -H "Authorization: Bearer $NAS_KB_API_TOKEN" \
-  -o "./source-file"
-```
-
-The optional read token cannot upload, edit, delete, or re-index NAS content.
+Use `search --all`, `scan`, and `get-many` inside the approved roots for larger
+file sets. The current team deployment uses individual NAS access, without a
+central semantic indexer or shared knowledge gateway.

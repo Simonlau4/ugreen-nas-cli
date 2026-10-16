@@ -8,6 +8,10 @@ The CLI uses each user's own NAS account. Passwords are not stored in this repos
 
 V0.1.0 uses `ugnas` / `nas-cli` as the default team path: each teammate connects with an individual NAS account and reads only explicitly allowed roots.
 
+The current team deployment uses only the NAS CLI and its base Skill. The
+shared semantic-search service and knowledge gateway were retired on
+2026-09-18; the `nas-kb` material below describes the historical optional layer.
+
 The optional [`nas-kb/`](nas-kb/) package adds semantic retrieval when ordinary NAS file search is insufficient. It builds an incremental knowledge index from approved NAS Markdown, PDF, and DOCX files, keeps NAS files as the source of truth, uses EverOS as a rebuildable retrieval layer, and provides an authenticated read-only gateway for team Agents.
 
 When semantic retrieval is needed, the two layers have separate roles:
@@ -76,10 +80,10 @@ they depend on different command-line tools.
 
 | Skill | Who needs it | What it does | Required command |
 | --- | --- | --- | --- |
-| `cli-anything-ugreen-nas` | **Required for every teammate in the current pilot.** | Guides the Agent to check the personal NAS connection and allowed roots, load the shared Agent knowledge entry, search and read source files, preserve NAS source paths in answers, and safely perform authorized file operations. | `ugnas` / `nas-cli` |
-| `nas-knowledge-base` | **Optional.** Install only on the central indexer or an Agent machine configured to use the shared semantic-search gateway. | Guides semantic search across approved NAS Markdown, PDF, and DOCX content, incremental indexing, index health checks, and retrieval of the current NAS original behind a search result. | `nas-kb`; local indexing also requires EverOS |
+| `cli-anything-ugreen-nas` | **Required for every teammate.** | Guides the Agent to check the personal NAS connection and allowed roots, load the shared Agent knowledge entry, search and read source files, preserve NAS source paths in answers, and safely perform authorized file operations. | `ugnas` / `nas-cli` |
+| `nas-knowledge-base` | **Historical. Not installed for the current team deployment.** | Describes the former semantic-search and indexing layer. | `nas-kb`; indexing required EverOS |
 
-For the current teammate connection and Q&A pilot, install only
+For teammate connection and first-time Q&A acceptance, install only
 `cli-anything-ugreen-nas`. Ordinary NAS access and the startup acceptance test
 do not require `nas-knowledge-base`.
 
@@ -149,11 +153,32 @@ ugnas --profile default --json cat "/Agent_Knowledge_Base/PROJECTS.md"
 ugnas --profile default --json cat "/Agent_Knowledge_Base/STARTUP_TEST_KNOWLEDGE.md"
 ```
 
-Repeat `--allowed-root` for an approved project root only when the teammate needs project data. The Agent knowledge base does not grant project access. The current startup pilot is complete when a teammate's local Agent reads `STARTUP_TEST_KNOWLEDGE.md` and answers a listed question with that NAS source path; project access and semantic search are not required.
+Repeat `--allowed-root` for an approved project root only when the teammate needs project data. The Agent knowledge base does not grant project access. First-time read-only acceptance is complete when a teammate's local Agent reads `STARTUP_TEST_KNOWLEDGE.md` and answers a listed question with that NAS source path. Before team file writes, also verify the configured NAS audit archive and one approved write receipt.
 
 For administrator and teammate rollout, follow [`docs/team-onboarding.md`](docs/team-onboarding.md).
 
-## Deploy the shared knowledge layer
+## Update an existing installation
+
+In the existing repository, preserve any local changes, then run:
+
+```bash
+git switch main
+git pull --ff-only origin main
+cd agent-harness
+scripts/install.sh
+```
+
+The installer keeps the existing NAS profile and Keychain password. It replaces
+the CLI and repository-managed Skill, so preserve any personal Skill changes
+first. Do not rerun account setup merely to upgrade. Add `audit_root` to the
+existing profile, keep its credentials and authorized roots, and confirm
+`capabilities.audit.remote_root` before team writes. Follow the
+[complete update and write-verification steps](docs/team-onboarding.md#update-an-existing-installation).
+
+## Historical shared knowledge layer
+
+This optional layer is not part of current team installation or updates.
+The team's shared semantic-search service and gateway are retired.
 
 `nas-kb` requires a separately deployed EverOS API. EverOS and its LLM, embedding, and rerank provider credentials are intentionally not bundled in this repository. Before continuing, keep EverOS on the central indexer and verify that its health endpoint returns `status=ok`:
 
