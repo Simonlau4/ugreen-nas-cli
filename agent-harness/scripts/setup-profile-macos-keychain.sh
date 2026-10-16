@@ -8,6 +8,7 @@ SERVICE="ugreen-nas"
 INSECURE=0
 RUN_DOCTOR=1
 ALLOWED_ROOTS=()
+AUDIT_ROOT=""
 
 usage() {
   cat <<'EOF'
@@ -16,7 +17,8 @@ Usage:
     --base-url https://NAS_OR_TAILSCALE:5006 \
     --username alice \
     --allowed-root "/Shared" \
-    [--profile default] [--service ugreen-nas] [--insecure] [--no-doctor]
+    [--profile default] [--service ugreen-nas] [--insecure] [--no-doctor] \
+    [--audit-root "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"]
 
 Stores the NAS password in macOS Keychain, then writes:
   ~/.config/ugreen-nas-cli/config.toml
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --service)
       SERVICE="$2"
+      shift 2
+      ;;
+    --audit-root)
+      AUDIT_ROOT="$2"
       shift 2
       ;;
     --insecure)
@@ -124,6 +130,9 @@ done
 
 if [[ "$INSECURE" -eq 1 ]]; then
   PROFILE_ARGS+=(--insecure)
+fi
+if [[ -n "$AUDIT_ROOT" ]]; then
+  PROFILE_ARGS+=(--audit-root "$AUDIT_ROOT")
 fi
 
 "$UGNAS_BIN" "${PROFILE_ARGS[@]}"

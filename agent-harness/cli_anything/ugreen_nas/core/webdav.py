@@ -109,6 +109,14 @@ class WebDavClient:
         if etag:
             headers["If-Match"] = etag
         elif not overwrite:
+            # Some NAS WebDAV servers ignore If-None-Match on PUT.
+            try:
+                self.stat(path)
+            except WebDavError as exc:
+                if exc.status != 404:
+                    raise
+            else:
+                raise WebDavError(f"remote path exists; use --overwrite: {path}", status=412)
             headers["If-None-Match"] = "*"
         self.request("PUT", path, body=data, headers=headers, expected={200, 201, 204})
 

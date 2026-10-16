@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -13,7 +14,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-from .core.audit import append_audit
+from .core.audit import AuditError, audited_write
 from .core.config import ConfigError, load_profile, macos_keychain_password_command, write_profile
 from .core.downloads import download_many
 from .core.paths import PathAccessError, assert_allowed
@@ -29,6 +30,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         return run(args)
+    except AuditError as exc:
+        payload = {
+            "ok": False,
+            "error": "AuditError",
+            "message": str(exc),
+            "cause": str(exc.__cause__),
+            "mutation_applied": exc.mutation_applied,
+            "audit": exc.receipt,
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+        else:
+            print(f"error: {exc}: {exc.__cause__}", file=sys.stderr)
+            print(f"audit: {json.dumps(exc.receipt, ensure_ascii=False)}", file=sys.stderr)
+        return 3 if exc.mutation_applied is not False else 2
     except (ConfigError, PathAccessError, WebDavError, OSError) as exc:
         payload: dict[str, Any] = {
             "ok": False,
@@ -74,6 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("--password-command")
     profile.add_argument("--macos-keychain-service")
     profile.add_argument("--insecure", action="store_true", help="Disable TLS verification.")
+    profile.add_argument("--audit-root", help="Archive write audit records in this allowed NAS directory.")
 
     doctor = subparsers.add_parser("doctor", help="Validate config and WebDAV reachability.")
     doctor.add_argument("--path", help="Also verify access to this configured NAS path.")
@@ -212,28 +229,28 @@ def run(args: argparse.Namespace) -> int:
         return cmd_edit(args, profile, client)
     if args.command == "mkdir":
         path = assert_allowed(args.remote_path, profile.allowed_roots)
-        client.mkdir(path)
-        audit(profile, "mkdir", path=path)
-        return emit(args, {"ok": True, "path": path}, f"created {path}")
+        with audited_write(profile, client, "mkdir", path=path) as receipt:
+            client.mkdir(path)
+        return emit(args, {"ok": True, "path": path, "audit": receipt}, f"created {path}")
     if args.command == "mv":
         src = assert_allowed(args.src, profile.allowed_roots)
         dst = assert_allowed(args.dst, profile.allowed_roots)
-        client.move(src, dst, overwrite=args.overwrite)
-        audit(profile, "mv", src=src, dst=dst, overwrite=args.overwrite)
-        return emit(args, {"ok": True, "src": src, "dst": dst}, f"moved {src} -> {dst}")
+        with audited_write(profile, client, "mv", src=src, dst=dst, overwrite=args.overwrite) as receipt:
+            client.move(src, dst, overwrite=args.overwrite)
+        return emit(args, {"ok": True, "src": src, "dst": dst, "audit": receipt}, f"moved {src} -> {dst}")
     if args.command == "cp":
         src = assert_allowed(args.src, profile.allowed_roots)
         dst = assert_allowed(args.dst, profile.allowed_roots)
-        client.copy(src, dst, overwrite=args.overwrite)
-        audit(profile, "cp", src=src, dst=dst, overwrite=args.overwrite)
-        return emit(args, {"ok": True, "src": src, "dst": dst}, f"copied {src} -> {dst}")
+        with audited_write(profile, client, "cp", src=src, dst=dst, overwrite=args.overwrite) as receipt:
+            client.copy(src, dst, overwrite=args.overwrite)
+        return emit(args, {"ok": True, "src": src, "dst": dst, "audit": receipt}, f"copied {src} -> {dst}")
     if args.command == "rm":
         if not args.yes:
             raise ConfigError("rm requires --yes")
         path = assert_allowed(args.remote_path, profile.allowed_roots)
-        client.delete(path)
-        audit(profile, "rm", path=path)
-        return emit(args, {"ok": True, "path": path}, f"deleted {path}")
+        with audited_write(profile, client, "rm", path=path) as receipt:
+            client.delete(path)
+        return emit(args, {"ok": True, "path": path, "audit": receipt}, f"deleted {path}")
     if args.command == "search":
         return cmd_search(args, profile, client)
     if args.command == "recent":
@@ -261,6 +278,7 @@ def cmd_profile_init(args: argparse.Namespace) -> int:
         password_command=password_command,
         verify_tls=not args.insecure,
         config_path=args.config,
+        audit_root=args.audit_root,
     )
     payload = {"ok": True, "config": str(path), "profile": args.profile}
     return emit(args, payload, f"wrote profile {args.profile} to {path}")
@@ -313,6 +331,12 @@ def cmd_capabilities(args: argparse.Namespace, profile) -> int:
         "write_commands": ["put", "edit", "mkdir", "mv", "cp"],
         "dangerous_commands": ["rm"],
         "bulk_read": {"default_workers": 4, "partial_exit_code": 3, "resume": "get-many --resume"},
+        "audit": {
+            "local_log": str(profile.audit_log) if profile.audit_log else None,
+            "remote_root": profile.audit_root,
+            "statuses": ["started", "succeeded", "failed"],
+            "incomplete_receipt_exit_code": 3,
+        },
         "safety": {
             "global_flags_before_command": True,
             "preview_writes_with": "--dry-run",
@@ -383,15 +407,19 @@ def cmd_put(args: argparse.Namespace, profile, client: WebDavClient) -> int:
         data = sys.stdin.buffer.read()
     else:
         data = Path(args.local_path).read_bytes()
-    client.put(remote, data, overwrite=args.overwrite)
-    audit(profile, "put", path=remote, bytes=len(data), overwrite=args.overwrite)
-    payload = {"ok": True, "remote_path": remote, "bytes": len(data), "overwrite": args.overwrite}
+    with audited_write(
+        profile, client, "put", path=remote, bytes=len(data), overwrite=args.overwrite,
+        sha256=hashlib.sha256(data).hexdigest(),
+    ) as receipt:
+        client.put(remote, data, overwrite=args.overwrite)
+    payload = {"ok": True, "remote_path": remote, "bytes": len(data), "overwrite": args.overwrite, "audit": receipt}
     return emit(args, payload, f"uploaded {len(data)} bytes to {remote}")
 
 
 def cmd_edit(args: argparse.Namespace, profile, client: WebDavClient) -> int:
     remote = assert_allowed(args.remote_path, profile.allowed_roots)
     etag = None
+    existed = True
     try:
         item = client.stat(remote)
         etag = item.etag
@@ -400,6 +428,7 @@ def cmd_edit(args: argparse.Namespace, profile, client: WebDavClient) -> int:
         if exc.status != 404 or not args.create:
             raise
         original = b""
+        existed = False
 
     editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
     if not editor:
@@ -418,9 +447,13 @@ def cmd_edit(args: argparse.Namespace, profile, client: WebDavClient) -> int:
 
     if updated == original:
         return emit(args, {"ok": True, "changed": False, "remote_path": remote}, "unchanged")
-    client.put(remote, updated, overwrite=args.create, etag=etag)
-    audit(profile, "edit", path=remote, bytes=len(updated), had_etag=bool(etag))
-    return emit(args, {"ok": True, "changed": True, "remote_path": remote}, f"saved {remote}")
+    with audited_write(
+        profile, client, "edit", path=remote, bytes=len(updated), had_etag=bool(etag),
+        created=not existed, sha256=hashlib.sha256(updated).hexdigest(),
+        before_sha256=hashlib.sha256(original).hexdigest() if existed else None,
+    ) as receipt:
+        client.put(remote, updated, overwrite=args.create, etag=etag)
+    return emit(args, {"ok": True, "changed": True, "remote_path": remote, "audit": receipt}, f"saved {remote}")
 
 
 def cmd_search(args: argparse.Namespace, profile, client: WebDavClient) -> int:
@@ -532,18 +565,6 @@ def _parse_modified(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def audit(profile, action: str, **fields: Any) -> None:
-    append_audit(
-        profile.audit_log,
-        {
-            "username": profile.username,
-            "profile": profile.name,
-            "action": action,
-            **fields,
-        },
-    )
 
 
 def emit(args: argparse.Namespace, payload: dict[str, Any], human: str) -> int:
