@@ -117,7 +117,12 @@ The CLI needs a raw WebDAV endpoint, not just a browser login page. Prefer:
 
 UGREENlink is useful for browser/client access, but only use it with this CLI if `ugnas --json doctor` succeeds.
 
-## Optional semantic search
+## Historical semantic search
+
+The current team deployment retired the shared semantic-search service and
+knowledge gateway on 2026-09-18. Team onboarding and CLI updates use only
+`ugnas` / `nas-cli` and the base Skill. The contract below is historical;
+do not use it as a current team connection instruction.
 
 Only when ordinary NAS file search is insufficient and the user provides `NAS_KB_API_URL` and `NAS_KB_API_TOKEN` through the local secret environment, query the shared read-only gateway:
 
