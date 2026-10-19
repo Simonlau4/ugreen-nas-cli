@@ -178,6 +178,19 @@ custom archives are preserved. Keep the credentials and authorized roots, and co
 `capabilities.audit.remote_root` before team writes. Follow the
 [complete update and write-verification steps](docs/team-onboarding.md#update-an-existing-installation).
 
+## Automatic update notice
+
+After installation with `agent-harness/scripts/install.sh`, running `ugnas`,
+`nas-cli`, or `cli-anything-ugreen-nas` automatically checks for updates on
+GitHub `main`. A newer upstream revision produces a terminal notice with
+update instructions. JSON command output and exit codes are unchanged.
+
+Checks run at most once every six hours, with a two-second overall timeout.
+Offline, rate-limited, or failed checks stay silent and are cached too.
+Updates are never installed automatically. The installer records the source
+Git revision in its `installation.json`; source archives without Git history
+skip the check. Existing installations need one reinstall to gain this notice.
+
 ## Historical shared knowledge layer
 
 This optional layer is not part of current team installation or updates.

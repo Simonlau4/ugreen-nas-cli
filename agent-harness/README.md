@@ -62,6 +62,10 @@ preserved. A disallowed or unwritable archive blocks file writes. Confirm
 The [full update guide](../docs/team-onboarding.md#update-an-existing-installation)
 covers allowed roots, profile names, executable selection, and incomplete receipts.
 
+Reinstalling also enables the [automatic update notice](../README.md#automatic-update-notice).
+CLI startup checks GitHub at most once every six hours; notices use stderr and
+do not change JSON output. Checks time out after two seconds and never install updates.
+
 ## Environment Variable Mode
 
 For short-lived tests, environment variables also work:

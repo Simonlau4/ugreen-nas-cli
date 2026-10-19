@@ -23,6 +23,20 @@ mkdir -p "$INSTALL_HOME" "$BIN_DIR"
 "$VENV_DIR/bin/python" -m pip install --upgrade pip >/dev/null
 "$VENV_DIR/bin/python" -m pip install --upgrade "$HARNESS_DIR" >/dev/null
 
+REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+"$PYTHON_BIN" - "$INSTALL_HOME/installation.json" "$REVISION" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+revision = sys.argv[2]
+Path(sys.argv[1]).write_text(
+    json.dumps({"revision": revision if re.fullmatch(r"[0-9a-f]{40}", revision) else None}) + "\n",
+    encoding="utf-8",
+)
+PY
+
 cat > "$BIN_DIR/ugnas" <<EOF
 #!/usr/bin/env bash
 exec "$VENV_DIR/bin/ugnas" "\$@"

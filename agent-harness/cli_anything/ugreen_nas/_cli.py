@@ -19,10 +19,12 @@ from .core.config import ConfigError, load_profile, macos_keychain_password_comm
 from .core.downloads import download_many
 from .core.paths import PathAccessError, assert_allowed
 from .core.scan import scan_tree
+from .core.updates import notify_update
 from .core.webdav import WebDavClient, WebDavError, WebDavItem
 
 
 def main(argv: list[str] | None = None) -> int:
+    notify_update()
     parser = build_parser()
     args = parser.parse_args(argv)
     if not args.command:
