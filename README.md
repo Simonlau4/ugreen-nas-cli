@@ -116,7 +116,8 @@ Configure your own NAS account:
 scripts/setup-profile-macos-keychain.sh \
   --base-url https://NAS_IP_OR_DOMAIN:5006 \
   --username YOUR_NAS_USERNAME \
-  --allowed-root "/Shared"
+  --allowed-root "/Shared" \
+  --audit-root "/Shared/CLI_AUDIT_LOGS"
 ```
 
 If your NAS still uses a self-signed HTTPS certificate, add `--insecure`:
@@ -126,6 +127,7 @@ scripts/setup-profile-macos-keychain.sh \
   --base-url https://NAS_IP_OR_DOMAIN:5006 \
   --username YOUR_NAS_USERNAME \
   --allowed-root "/Shared" \
+  --audit-root "/Shared/CLI_AUDIT_LOGS" \
   --insecure
 ```
 
@@ -170,8 +172,9 @@ scripts/install.sh
 
 The installer keeps the existing NAS profile and Keychain password. It replaces
 the CLI and repository-managed Skill, so preserve any personal Skill changes
-first. Do not rerun account setup merely to upgrade. Add `audit_root` to the
-existing profile, keep its credentials and authorized roots, and confirm
+first. Do not rerun account setup merely to upgrade. Missing or empty
+`audit_root` now defaults to `/Agent_Knowledge_Base/CLI_AUDIT_LOGS`; existing
+custom archives are preserved. Keep the credentials and authorized roots, and confirm
 `capabilities.audit.remote_root` before team writes. Follow the
 [complete update and write-verification steps](docs/team-onboarding.md#update-an-existing-installation).
 
@@ -273,7 +276,10 @@ Avoid plain HTTP and avoid directly publishing NAS services to the public intern
 
 ## NAS audit archive
 
-Set `audit_root` in each user's profile to archive CLI writes on the NAS:
+CLI writes automatically create local and NAS audit records. Missing or empty
+`audit_root` defaults to `/Agent_Knowledge_Base/CLI_AUDIT_LOGS`, so existing
+team profiles gain NAS logging after upgrading without a configuration rewrite.
+To select a different archive, set `audit_root` in the profile:
 
 ```toml
 [profile.default]
@@ -285,7 +291,10 @@ audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
 The setup script and `profile-init` also accept `--audit-root`. For a short-lived
 process, use `UGREEN_NAS_AUDIT_ROOT`. The archive must be inside `allowed_roots`
 and writable by the personal NAS account; no permissions are changed by the CLI.
-Profiles without `audit_root` retain local-only logging.
+The CLI does not silently fall back to local-only logging. If the archive is
+outside the configured allowed roots or cannot save the start record, the
+file operation is blocked. For a standalone profile without the shared Agent
+root, select an authorized archive such as `/Team/CLI_AUDIT_LOGS`.
 
 `put`, `edit`, `mkdir`, `mv`, `cp`, and `rm` record the NAS username, UTC time,
 command, affected NAS paths, and result. Uploads include byte count, SHA-256,
@@ -319,7 +328,7 @@ ugnas --json cat "/Agent_Knowledge_Base/CLI_AUDIT_LOGS/YYYY-MM-DD/EVENT_ID.succe
 
 The CLI blocks file mutations inside the configured archive and moves/deletes
 of its ancestors. NAS permissions still govern access from other tools. This
-is a cooperative CLI activity archive: only upgraded, configured clients are
+is a cooperative CLI activity archive: only upgraded CLI clients are
 covered, and older clients or direct WebDAV access can bypass it. Existing
 activity cannot be reconstructed from these records. Use NAS administrator
 access controls and backups when stronger retention is required.

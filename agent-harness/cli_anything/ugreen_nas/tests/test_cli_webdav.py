@@ -391,6 +391,7 @@ def write_config(tmp_path: Path, base_url: str) -> Path:
         allowed_roots = ["/Team"]
         verify_tls = true
         audit_log = "{tmp_path / 'audit.log'}"
+        audit_root = "/Team/CLI_AUDIT_LOGS"
         """,
         encoding="utf-8",
     )

@@ -13,8 +13,9 @@ This file is safe to give to a coworker's AI agent after `ugnas` is installed an
 - Never overwrite an existing local download unless the user requested it; `get` requires `--overwrite`.
 - Do not use `rm` unless the user explicitly asks to delete something.
 - `rm` requires `--yes`.
-- Inspect `capabilities.audit.remote_root` to confirm whether NAS write auditing
-  is enabled. With it configured, writes require a saved start record and return
+- Inspect `capabilities.audit.remote_root` for the NAS write archive. Missing or
+  empty `audit_root` defaults to `/Agent_Knowledge_Base/CLI_AUDIT_LOGS`; existing
+  custom archives remain in use. Writes require a saved start record and return
   an `audit` receipt. Exit 3 with `mutation_applied: true` means the file change
   succeeded but its receipt is incomplete: inspect the target and local/NAS
   receipt paths, and do not repeat the file operation. Read commands, dry runs,

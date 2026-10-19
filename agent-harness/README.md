@@ -27,7 +27,8 @@ The package installs two commands:
 scripts/setup-profile-macos-keychain.sh \
   --base-url https://NAS_IP_OR_DOMAIN:5006 \
   --username YOUR_NAS_USERNAME \
-  --allowed-root "/Shared"
+  --allowed-root "/Shared" \
+  --audit-root "/Shared/CLI_AUDIT_LOGS"
 ```
 
 If the NAS uses a self-signed HTTPS certificate, add `--insecure` for now. Prefer a trusted certificate for normal use.
@@ -40,8 +41,9 @@ The generated config lives at:
 
 The password stays in macOS Keychain.
 
-For team setup, add `--audit-root "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"` and
-include the authorized knowledge root. Follow the
+Team profiles default to `/Agent_Knowledge_Base/CLI_AUDIT_LOGS` for write
+auditing. Include the authorized knowledge root; a custom `--audit-root` is
+needed only for a different archive. Follow the
 [team setup and audit acceptance guide](../docs/team-onboarding.md).
 
 ## Update An Existing Installation
@@ -53,8 +55,9 @@ and Keychain password; it replaces the repository-managed Skill. Preserve
 personal Skill changes first. Do not rerun the account setup script solely
 to update the tool.
 
-Add `audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"` inside the existing
-profile, keeping its credentials and authorized roots. Confirm
+Missing or empty `audit_root` defaults to `/Agent_Knowledge_Base/CLI_AUDIT_LOGS`
+after the update; existing custom archives, credentials and allowed roots are
+preserved. A disallowed or unwritable archive blocks file writes. Confirm
 `capabilities.audit.remote_root` and read back one approved write receipt.
 The [full update guide](../docs/team-onboarding.md#update-an-existing-installation)
 covers allowed roots, profile names, executable selection, and incomplete receipts.
@@ -68,6 +71,7 @@ export UGREEN_NAS_BASE_URL="https://NAS_IP_OR_DOMAIN:5006"
 export UGREEN_NAS_USERNAME="alice"
 export UGREEN_NAS_PASSWORD="..."
 export UGREEN_NAS_ALLOWED_ROOTS="/Shared:/Team"
+export UGREEN_NAS_AUDIT_ROOT="/Shared/CLI_AUDIT_LOGS"
 ugnas --json doctor
 ```
 
