@@ -52,8 +52,6 @@ def server(tmp_path, monkeypatch):
     thread = threading.Thread(target=http.serve_forever, daemon=True)
     thread.start()
     config = write_config(tmp_path, f"http://127.0.0.1:{http.server_port}")
-    with config.open("a") as handle:
-        handle.write(f'audit_root = "{ROOT}"\n')
     try:
         yield config, store
     finally:
@@ -305,3 +303,60 @@ def test_capabilities_reports_profile_and_environment_audit_root(server, capsys,
     code, result = call(config, capsys, "capabilities")
     assert code == 0 and result["audit"]["remote_root"] == "/Team/OtherLogs"
     assert not store.puts
+
+
+@pytest.mark.parametrize("setting", ["", 'audit_root = ""'])
+def test_missing_or_empty_audit_root_archives_upload_results(server, tmp_path, capsys, monkeypatch, setting):
+    config, store = server
+    root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
+    monkeypatch.delenv("UGREEN_NAS_AUDIT_ROOT", raising=False)
+    config.write_text(config.read_text().replace(f'audit_root = "{ROOT}"', setting).replace(
+        'allowed_roots = ["/Team"]', 'allowed_roots = ["/Team", "/Agent_Knowledge_Base"]'
+    ))
+    original_config = config.read_bytes()
+    store.items["/Agent_Knowledge_Base"] = None
+    local = tmp_path / "upload.txt"
+    local.write_bytes(b"uploaded")
+
+    code, capabilities = call(config, capsys, "capabilities")
+    assert code == 0 and capabilities["audit"]["remote_root"] == root
+    code, result = call(config, capsys, "put", str(local), "/Team/report.txt")
+    assert code == 0 and result["audit"]["remote_path"].startswith(root + "/")
+    code, result = call(config, capsys, "put", str(local), "/Team/report.txt")
+    assert code == 2 and result["status"] == 412
+    archived = [json.loads(data) for path, data in store.items.items()
+                if path.startswith(root + "/") and data is not None]
+    assert [record["status"] for record in archived] == ["started", "succeeded", "started", "failed"]
+    assert local_records(config) == archived
+    assert all(record["username"] == "alice" for record in archived)
+    assert all(record["sha256"] == hashlib.sha256(b"uploaded").hexdigest() for record in archived)
+    assert config.read_bytes() == original_config
+
+
+def test_default_audit_archive_does_not_expand_allowed_roots(server, tmp_path, capsys, monkeypatch):
+    config, store = server
+    monkeypatch.delenv("UGREEN_NAS_AUDIT_ROOT", raising=False)
+    config.write_text(config.read_text().replace(f'audit_root = "{ROOT}"', ""))
+    original_config = config.read_bytes()
+    local = tmp_path / "upload.txt"
+    local.write_bytes(b"uploaded")
+    code, result = call(config, capsys, "put", str(local), "/Team/report.txt")
+    assert code == 2 and result["error"] == "PathAccessError"
+    assert "/Team/report.txt" not in store.items and not store.puts
+    assert config.read_bytes() == original_config
+    assert not (tmp_path / "audit.log").exists()
+
+
+def test_default_audit_archive_failure_prevents_upload(server, tmp_path, capsys, monkeypatch):
+    config, store = server
+    monkeypatch.delenv("UGREEN_NAS_AUDIT_ROOT", raising=False)
+    config.write_text(config.read_text().replace(f'audit_root = "{ROOT}"', "").replace(
+        'allowed_roots = ["/Team"]', 'allowed_roots = ["/Team", "/Agent_Knowledge_Base"]'
+    ))
+    store.denied_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
+    local = tmp_path / "upload.txt"
+    local.write_bytes(b"uploaded")
+    code, result = call(config, capsys, "put", str(local), "/Team/report.txt")
+    assert code == 2 and result["error"] == "AuditError"
+    assert result["mutation_applied"] is False
+    assert "/Team/report.txt" not in store.items and not store.puts

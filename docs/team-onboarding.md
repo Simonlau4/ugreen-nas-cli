@@ -103,8 +103,10 @@ Do not rerun the account setup script merely to update the CLI. If the old
 checkout is unavailable, clone into a new directory and run only the install
 step; the existing profile remains usable.
 
-In the existing `[profile.default]` section of
-`~/.config/ugreen-nas-cli/config.toml`, add or update this one key:
+The updated CLI automatically uses `/Agent_Knowledge_Base/CLI_AUDIT_LOGS` when
+`audit_root` is missing or empty. No profile edit is required for that default;
+existing custom archives are preserved. To select the archive explicitly,
+set this key in the existing profile section:
 
 ```toml
 audit_root = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
@@ -152,7 +154,7 @@ and status `succeeded`. Do not delete the test file without approval.
 An inaccessible or uncreatable audit archive blocks the file write. Exit code
 3 with `mutation_applied: true` means the file change succeeded but its receipt
 is incomplete: inspect the file and receipt paths, and do not repeat the write.
-No NAS permissions are changed by installation. Older or unconfigured clients
+No NAS permissions are changed by installation. Older clients, non-CLI uploads
 and historical operations are outside coverage. See the
 [audit archive behavior](../README.md#nas-audit-archive).
 

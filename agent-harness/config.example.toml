@@ -8,6 +8,7 @@ password_command = "security find-generic-password -s ugreen-nas -a alice -w"
 allowed_roots = ["/Team"]
 verify_tls = true
 audit_log = "~/.local/state/ugreen-nas-cli/audit.log"
-# Optional NAS archive. The account needs write access and this directory must
-# be inside allowed_roots. Keep the archive separate from business files.
-# audit_root = "/Team/CLI_AUDIT_LOGS"
+# Without this key, writes use /Agent_Knowledge_Base/CLI_AUDIT_LOGS.
+# This standalone example uses an archive inside its existing allowed root.
+# The account needs write access; audit failures block file changes.
+audit_root = "/Team/CLI_AUDIT_LOGS"

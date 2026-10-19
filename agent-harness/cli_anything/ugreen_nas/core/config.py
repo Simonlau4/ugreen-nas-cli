@@ -14,6 +14,7 @@ from .paths import assert_allowed
 
 DEFAULT_CONFIG_PATH = Path("~/.config/ugreen-nas-cli/config.toml").expanduser()
 DEFAULT_AUDIT_LOG = Path("~/.local/state/ugreen-nas-cli/audit.log").expanduser()
+DEFAULT_AUDIT_ROOT = "/Agent_Knowledge_Base/CLI_AUDIT_LOGS"
 
 
 class ConfigError(RuntimeError):
@@ -99,7 +100,9 @@ def load_profile(name: str, config_path: Path | None = None, timeout: float | No
 
     audit_log_raw = os.environ.get("UGREEN_NAS_AUDIT_LOG") or profile_data.get("audit_log")
     audit_log = Path(audit_log_raw).expanduser() if audit_log_raw else DEFAULT_AUDIT_LOG
-    audit_root = os.environ.get("UGREEN_NAS_AUDIT_ROOT") or profile_data.get("audit_root")
+    audit_root = (
+        os.environ.get("UGREEN_NAS_AUDIT_ROOT") or profile_data.get("audit_root") or DEFAULT_AUDIT_ROOT
+    )
 
     if not base_url:
         raise ConfigError("missing base_url; set UGREEN_NAS_BASE_URL or run profile-init")
