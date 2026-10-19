@@ -1,4 +1,5 @@
 import os
+import json
 import stat
 import subprocess
 import sys
@@ -91,3 +92,6 @@ def test_installer_registers_matching_codex_skill(
     ).read_bytes()
     assert (installed_skill / "agents" / "openai.yaml").is_file()
     assert f"Installed Codex skill {skill}" in result.stdout
+    if skill == "cli-anything-ugreen-nas":
+        revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
+        assert json.loads((tmp_path / "install" / "installation.json").read_text()) == {"revision": revision}

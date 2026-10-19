@@ -103,6 +103,12 @@ Do not rerun the account setup script merely to update the CLI. If the old
 checkout is unavailable, clone into a new directory and run only the install
 step; the existing profile remains usable.
 
+This installer also records the installed Git revision for automatic update
+notices. Later CLI runs check GitHub at most once every six hours, and show
+update instructions in the terminal when newer code is available. Offline
+checks stay silent; normal JSON output is unaffected. See the
+[update notice behavior](../README.md#automatic-update-notice).
+
 The updated CLI automatically uses `/Agent_Knowledge_Base/CLI_AUDIT_LOGS` when
 `audit_root` is missing or empty. No profile edit is required for that default;
 existing custom archives are preserved. To select the archive explicitly,
